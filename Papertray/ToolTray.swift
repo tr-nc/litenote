@@ -123,6 +123,7 @@ final class ToolTrayController: NSWindowController {
         if preview == nil {
             let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 440),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.animationBehavior = .none
             panel.ignoresMouseEvents = true
             panel.level = .floating
             panel.alphaValue = 0.55

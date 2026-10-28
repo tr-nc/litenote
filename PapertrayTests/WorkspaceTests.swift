@@ -49,6 +49,44 @@ extension EditorAndStorageTests {
         }
     }
 
+    func testWorkspaceWindowsDisableAutomaticAnimationBeforeFirstShowAndAfterToggling() throws {
+        try withWorkspace { workspace, tray, _ in
+            let ruled = try editor(kind: .ruled)
+            let checklist = try editor()
+            workspace.add(ruled)
+            workspace.add(checklist)
+            let windows = try [tray.window, ruled.window, checklist.window].map { try XCTUnwrap($0) }
+            for window in windows { XCTAssertEqual(window.animationBehavior, .none) }
+            for _ in 0..<3 {
+                try workspace.toggle(activate: false)
+                for window in windows {
+                    XCTAssertTrue(window.isVisible)
+                    XCTAssertEqual(window.animationBehavior, .none)
+                }
+                try workspace.toggle(activate: false)
+                for window in windows {
+                    XCTAssertFalse(window.isVisible)
+                    XCTAssertEqual(window.animationBehavior, .none)
+                }
+            }
+        }
+    }
+
+    func testPaperDragPreviewDisablesAutomaticAnimation() throws {
+        try withWorkspace { _, tray, _ in
+            let existing = Set(NSApp.windows.map(ObjectIdentifier.init))
+            tray.press(kind: .ruled, point: NSPoint(x: 100, y: 100), anchor: .zero)
+            tray.move(to: NSPoint(x: 130, y: 130))
+            let preview = try XCTUnwrap(NSApp.windows.first {
+                !existing.contains(ObjectIdentifier($0)) && $0.ignoresMouseEvents
+            })
+            XCTAssertEqual(preview.animationBehavior, .none)
+            XCTAssertTrue(preview.isVisible)
+            tray.hide()
+            XCTAssertFalse(preview.isVisible)
+        }
+    }
+
     func testWorkspaceHandlesZeroNotesAndNewNotesWhileHidden() throws {
         try withWorkspace { workspace, tray, _ in
             try workspace.toggle(activate: false)

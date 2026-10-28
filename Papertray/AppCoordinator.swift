@@ -193,6 +193,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if settings == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 170),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.animationBehavior = .none
             window.title = "Papertray 设置"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView())

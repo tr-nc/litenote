@@ -1,6 +1,13 @@
 import AppKit
 
 final class NotePanel: NSPanel {
+    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask,
+                  backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+        // AppKit otherwise infers an automatic orderFront/orderOut animation.
+        animationBehavior = .none
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
