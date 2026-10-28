@@ -24,19 +24,16 @@ final class PaperAttachment: NSTextAttachment {
         case task(UUID, Bool)
     }
     let value: Value
-    var toggle: ((UUID) -> Void)?
 
     init(value: Value) {
         self.value = value
         switch value {
-        case .task(_, let checked):
+        case .task:
             super.init(data: nil, ofType: nil)
-            // AppKit also uses the image projection for printing/cached drawing, where
-            // layer-backed attachment views are not necessarily composited.
-            image = NSImage(systemSymbolName: checked ? "checkmark.square.fill" : "square",
-                            accessibilityDescription: checked ? "已完成" : "未完成")
-            image?.size = NSSize(width: 22, height: 22)
-            bounds = NSRect(x: 0, y: -3, width: 22, height: 22)
+            // A zero-width semantic boundary, not an interactive checkbox. The stable
+            // control lives in ChecklistDocumentView's gutter, outside text selection.
+            image = NSImage(size: NSSize(width: 1, height: 1))
+            bounds = NSRect(x: 0, y: 0, width: 0, height: 1)
         case .image:
             super.init(data: nil, ofType: nil)
         }
@@ -44,36 +41,14 @@ final class PaperAttachment: NSTextAttachment {
 
     required init?(coder: NSCoder) { return nil }
 
-    override var usesTextAttachmentView: Bool {
-        if case .task = value { return allowsTextAttachmentView }
-        return false
-    }
+    override var usesTextAttachmentView: Bool { false }
 
-    override func viewProvider(for parentView: NSView?, location: any NSTextLocation,
-                               textContainer: NSTextContainer?) -> NSTextAttachmentViewProvider? {
-        if case .task = value {
-            return CheckboxProvider(textAttachment: self, parentView: parentView,
-                                    textLayoutManager: textContainer?.textLayoutManager, location: location)
-        }
-        return super.viewProvider(for: parentView, location: location, textContainer: textContainer)
-    }
-}
-
-final class CheckboxProvider: NSTextAttachmentViewProvider {
-    override func loadView() {
-        guard let attachment = textAttachment as? PaperAttachment,
-              case .task(_, let checked) = attachment.value else { return }
-        let button = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggle))
-        button.state = checked ? .on : .off
-        button.setAccessibilityLabel("完成待办")
-        button.frame = NSRect(x: 0, y: 0, width: 22, height: 22)
-        view = button
-    }
-
-    @objc private func toggle() {
-        guard let attachment = textAttachment as? PaperAttachment,
-              case .task(let id, _) = attachment.value else { return }
-        attachment.toggle?(id)
+    override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: any NSTextLocation,
+                                   textContainer: NSTextContainer?, proposedLineFragment: NSRect,
+                                   position: NSPoint) -> NSRect {
+        guard case .image = value, bounds.width > 0 else { return bounds }
+        let scale = min(1, max(1, proposedLineFragment.width) / bounds.width)
+        return NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width * scale, height: bounds.height * scale)
     }
 }
 
@@ -85,10 +60,11 @@ enum EditorProjection {
                 .papertrayInk: ink.rawValue, .paragraphStyle: paragraph]
     }
 
-    static func task(_ item: TaskItem, toggle: @escaping (UUID) -> Void) -> NSAttributedString {
+    static func task(_ item: TaskItem) -> NSAttributedString {
         let attachment = PaperAttachment(value: .task(item.id, item.isChecked))
-        attachment.toggle = toggle
-        return NSAttributedString(attachment: attachment)
+        let result = NSMutableAttributedString(attachment: attachment)
+        result.addAttributes(attributes(ink: .graphite), range: NSRange(location: 0, length: result.length))
+        return result
     }
 
     static func image(_ id: UUID, store: AttachmentStore) throws -> NSAttributedString {
@@ -106,8 +82,7 @@ enum EditorProjection {
         return NSAttributedString(attachment: attachment)
     }
 
-    static func render(_ content: NoteContent, store: AttachmentStore,
-                       toggle: @escaping (UUID) -> Void) throws -> NSAttributedString {
+    static func render(_ content: NoteContent, store: AttachmentStore) throws -> NSAttributedString {
         let result = NSMutableAttributedString(string: "")
         func append(_ runs: [Run]) throws {
             for run in runs {
@@ -123,7 +98,7 @@ enum EditorProjection {
         case .checklist(let tasks):
             for (index, item) in tasks.enumerated() {
                 if index > 0 { result.append(NSAttributedString(string: "\n", attributes: attributes(ink: .graphite))) }
-                result.append(task(item, toggle: toggle))
+                result.append(task(item))
                 try append(item.body)
             }
         }

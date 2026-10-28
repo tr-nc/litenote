@@ -10,8 +10,8 @@ final class NoteTextView: NSTextView {
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
     var beforeCopy: () throws -> Void = {}
     var onFocus: () -> Void = {}
+    var onPresentationChange: () -> Void = {}
     private(set) var importing = false
-    private var replacingTaskMarker = false
 
     override func draw(_ dirtyRect: NSRect) {
         if kind == .ruled { RuledPaper.draw(in: dirtyRect, editor: self) }
@@ -20,13 +20,19 @@ final class NoteTextView: NSTextView {
 
     override func didChangeText() {
         super.didChangeText()
-        // Reflow can move rules outside the edited glyphs' invalidation rectangle.
-        if kind == .ruled { needsDisplay = true }
+        invalidatePaper()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
+        let changed = frame.size != newSize
         super.setFrameSize(newSize)
-        if kind == .ruled { needsDisplay = true }
+        if changed { invalidatePaper() }
+    }
+
+    func invalidatePaper() {
+        // Reflow and undo can move decoration outside the edited glyphs' rectangle.
+        needsDisplay = true
+        onPresentationChange()
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -102,7 +108,7 @@ final class NoteTextView: NSTextView {
     override func insertNewline(_ sender: Any?) {
         guard kind == .checklist, !hasMarkedText() else { super.insertNewline(sender); return }
         let value = NSMutableAttributedString(string: "\n", attributes: EditorProjection.attributes(ink: ink))
-        value.append(EditorProjection.task(TaskItem()) { [weak self] in self?.toggleTask($0) })
+        value.append(EditorProjection.task(TaskItem()))
         insertText(value, replacementRange: selectedRange())
         typingAttributes = EditorProjection.attributes(ink: ink)
     }
@@ -121,9 +127,13 @@ final class NoteTextView: NSTextView {
     // The first checkbox is a structural root: deleting all content leaves one empty task.
     // Subsequent markers can be removed; their bodies merge into the preceding item.
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        if kind == .checklist, !replacingTaskMarker,
-           affectedCharRange.location == 0, affectedCharRange.length > 0 {
-            return false
+        if kind == .checklist {
+            if affectedCharRange.location == 0, affectedCharRange.length > 0 { return false }
+            // Native word/line deletion must not strand a task marker inside a paragraph.
+            // The ordinary insert/delete paths below merge the boundary as one edit.
+            if isTaskMarker(at: NSMaxRange(affectedCharRange)),
+               replacementString?.hasSuffix("\n") != true,
+               !hasNewline(before: affectedCharRange.location) { return false }
         }
         return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
     }
@@ -135,6 +145,14 @@ final class NoteTextView: NSTextView {
            case .task = marker.value {
             range = NSRange(location: 1, length: max(0, range.length - 1))
         }
+        if kind == .checklist {
+            if range.length == 0, isTaskMarker(at: range.location) { range.location += 1 }
+            let replacement = (insertString as? NSAttributedString)?.string ?? (insertString as? String ?? "")
+            if range.length > 0, isTaskMarker(at: NSMaxRange(range)),
+               !replacement.hasSuffix("\n"), !hasNewline(before: range.location) {
+                range.length += 1
+            }
+        }
         let value: Any
         if let string = insertString as? String {
             value = NSAttributedString(string: string, attributes: EditorProjection.attributes(ink: ink))
@@ -143,15 +161,35 @@ final class NoteTextView: NSTextView {
         typingAttributes = EditorProjection.attributes(ink: ink)
     }
 
+    private func isTaskMarker(at offset: Int) -> Bool {
+        guard let storage = textStorage, offset >= 0, offset < storage.length,
+              let attachment = storage.attribute(.attachment, at: offset, effectiveRange: nil) as? PaperAttachment,
+              case .task = attachment.value else { return false }
+        return true
+    }
+
+    private func hasNewline(before offset: Int) -> Bool {
+        guard offset > 0, offset <= (string as NSString).length else { return false }
+        return (string as NSString).substring(with: NSRange(location: offset - 1, length: 1)) == "\n"
+    }
+
     override func deleteBackward(_ sender: Any?) {
-        if kind == .checklist, selectedRange().location == 0, selectedRange().length > 0 {
-            insertText("", replacementRange: selectedRange())
+        let range = selectedRange()
+        if kind == .checklist, range.length > 0 {
+            insertText("", replacementRange: range)
+        } else if kind == .checklist, isTaskMarker(at: range.location - 1), hasNewline(before: range.location - 1) {
+            insertText("", replacementRange: NSRange(location: range.location - 2, length: 2))
+        } else if kind == .checklist, isTaskMarker(at: range.location), hasNewline(before: range.location) {
+            insertText("", replacementRange: NSRange(location: range.location - 1, length: 2))
         } else { super.deleteBackward(sender) }
     }
 
     override func deleteForward(_ sender: Any?) {
-        if kind == .checklist, selectedRange().location == 0, selectedRange().length > 0 {
-            insertText("", replacementRange: selectedRange())
+        let range = selectedRange()
+        if kind == .checklist, range.length > 0 {
+            insertText("", replacementRange: range)
+        } else if kind == .checklist, isTaskMarker(at: range.location + 1), hasNewline(before: range.location + 1) {
+            insertText("", replacementRange: NSRange(location: range.location, length: 2))
         } else { super.deleteForward(sender) }
     }
 
@@ -164,13 +202,14 @@ final class NoteTextView: NSTextView {
         }
         guard let (range, checked) = match else { return }
         let selection = selectedRange()
-        let value = EditorProjection.task(TaskItem(id: id, isChecked: !checked)) { [weak self] in self?.toggleTask($0) }
-        // Bypass root-marker protection; this is a semantic replacement, not deletion.
+        let value = EditorProjection.task(TaskItem(id: id, isChecked: !checked))
+        // Checking is a semantic transaction, not typing an attachment. Native typing
+        // coalescing can swallow an attachment replacement after rich/paragraph edits.
         breakUndoCoalescing()
-        replacingTaskMarker = true
-        super.insertText(value, replacementRange: range)
-        replacingTaskMarker = false
-        breakUndoCoalescing()
+        undoManager?.registerUndo(withTarget: self) { editor in editor.toggleTask(id) }
+        undoManager?.setActionName("勾选待办")
+        storage.replaceCharacters(in: range, with: value)
+        didChangeText()
         setSelectedRange(selection)
         typingAttributes = EditorProjection.attributes(ink: ink)
         window?.makeFirstResponder(self)

@@ -209,11 +209,11 @@ final class EditorAndStorageTests: XCTestCase {
             TaskItem(isChecked: true, body: [.text("中文\n\nemoji 🥳", .purple), .image(id), .text("\n", .green)]),
             TaskItem(body: [.image(id), .text("尾", .red)])
         ])
-        let projected = try EditorProjection.render(content, store: attachments, toggle: { _ in })
+        let projected = try EditorProjection.render(content, store: attachments)
         XCTAssertEqual(EditorProjection.parse(projected, kind: .checklist, firstTaskID: UUID()), content)
     }
 
-    func testVisibleCheckboxProviderClickAndLongTaskLayout() async throws {
+    func testVisibleCheckboxClickAndLongTaskLayout() async throws {
         let controller = try editor()
         let view = controller.editor
         view.insertText("检查界面\n同一个待办可以持续写多段内容。\n", replacementRange: view.selectedRange())
@@ -230,7 +230,7 @@ final class EditorAndStorageTests: XCTestCase {
         if let range = view.textContentStorage?.documentRange {
             view.textLayoutManager?.ensureLayout(for: range)
         }
-        // Allow TextKit's viewport-based attachment providers to instantiate.
+        // Allow the scroll document to lay out its task regions.
         try await Task.sleep(for: .milliseconds(100))
         func buttons(in parent: NSView) -> [NSButton] {
             parent.subviews.flatMap { child in
@@ -243,10 +243,8 @@ final class EditorAndStorageTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
         controller.window?.display()
-        let marker = try XCTUnwrap(view.textStorage?.attribute(.attachment, at: 0, effectiveRange: nil) as? PaperAttachment)
-        XCTAssertTrue(marker.usesTextAttachmentView, "fileType: \(marker.fileType ?? "nil")")
-        let button = try XCTUnwrap(buttons(in: view).first { $0.target is CheckboxProvider },
-                                  "buttons: \(buttons(in: view)); subviews: \(view.subviews); visible: \(view.visibleRect)")
+        let documentView = try XCTUnwrap(view.enclosingScrollView?.documentView)
+        let button = try XCTUnwrap(buttons(in: documentView).first)
         let buttonRect = button.convert(button.bounds, to: view)
         XCTAssertTrue(view.visibleRect.intersects(buttonRect), "Checkbox frame: \(buttonRect)")
         XCTAssertGreaterThan(buttonRect.width, 10)

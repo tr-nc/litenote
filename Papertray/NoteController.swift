@@ -68,8 +68,8 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: frame.width - 36, height: CGFloat.greatestFiniteMagnitude)
         editor.frame = NSRect(x: 0, y: 0, width: frame.width, height: frame.height)
-        scroll.documentView = editor
-        let text = try EditorProjection.render(document.content, store: attachments) { [weak editor] in editor?.toggleTask($0) }
+        scroll.documentView = editor.kind == .checklist ? ChecklistDocumentView(editor: editor) : editor
+        let text = try EditorProjection.render(document.content, store: attachments)
         editor.textStorage?.setAttributedString(text)
         editor.ink = ink
         editor.delegate = self
@@ -87,6 +87,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         }
         editor.beforeCopy = { [weak self] in try self?.flush() }
         editor.setSelectedRange(NSRange(location: text.length, length: 0))
+        editor.invalidatePaper()
         assert(editor.textLayoutManager != nil, "TextKit 2 must remain active")
     }
 
@@ -98,6 +99,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
 
     func open() {
         showWindow(nil)
+        window?.contentView?.layoutSubtreeIfNeeded()
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(editor)
         onVisibility?(self, true)
@@ -119,8 +121,8 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         guard content != noteDocument.content else { return }
         noteDocument.content = content
         noteDocument.revision += 1
-        // Native undo can bypass didChangeText; invalidate decorative layout as well.
-        editor.needsDisplay = true
+        // Native undo can bypass didChangeText; update regions and decoration as well.
+        editor.invalidatePaper()
         dirty = true
         window?.isDocumentEdited = true
         saveWork?.cancel()
