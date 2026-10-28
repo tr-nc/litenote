@@ -175,30 +175,15 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
             panel.standardWindowButton(type)?.isHidden = true
         }
         // Keep AppKit's native placement, appearance and close action.
-        // The window delegate asks for deletion confirmation.
+        // The window delegate deletes the note immediately.
         guard let button = panel.standardWindowButton(.closeButton) else { return }
         button.isHidden = false
         button.toolTip = "永久删除这张纸"
         button.setAccessibilityLabel("永久删除这张纸")
     }
 
-    private func requestDeletion() {
-        guard !isDeleted, let window, window.attachedSheet == nil else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "永久删除这张纸？"
-        alert.informativeText = "正文和备份将被删除，无法撤销。已导出的图片附件会保留，避免旧路径失效。"
-        alert.addButton(withTitle: "取消")
-        alert.addButton(withTitle: "永久删除")
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertSecondButtonReturn, let self else { return }
-            do { try self.permanentlyDelete() }
-            catch { self.editor.reportError(error) }
-        }
-    }
-
-    /// Called only after explicit confirmation. A failed deletion leaves memory,
-    /// pending autosave and the window intact; a successful one cannot be undone.
+    /// A failed deletion leaves memory, pending autosave and the window intact;
+    /// a successful one cannot be undone.
     func permanentlyDelete() throws {
         guard !isDeleted else { return }
         guard !editor.importing else { throw PapertrayError.message("图片正在导入，请完成后再删除。") }
@@ -214,7 +199,9 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        requestDeletion()
+        do { try permanentlyDelete() }
+        catch { editor.reportError(error) }
+        // Deletion owns closing the window; failures must leave it open.
         return false
     }
 

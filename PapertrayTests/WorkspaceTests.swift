@@ -202,7 +202,7 @@ extension EditorAndStorageTests {
         }
     }
 
-    func testConfirmedDeletionRemovesPaperFromWorkspaceAndItNeverTogglesBack() async throws {
+    func testImmediateDeletionRemovesPaperFromWorkspaceAndItNeverTogglesBack() throws {
         let name = "local.papertray.workspace-delete-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
         let tray = ToolTrayController(ink: .blue)
@@ -210,7 +210,7 @@ extension EditorAndStorageTests {
         defer { tray.hide(); preferences.removePersistentDomain(forName: name) }
         let removed = try editor(kind: .ruled)
         let retained = try editor()
-        removed.editor.insertText("确认删除", replacementRange: removed.editor.selectedRange())
+        removed.editor.insertText("立即删除", replacementRange: removed.editor.selectedRange())
         try removed.flush()
         workspace.add(removed)
         workspace.add(retained)
@@ -220,14 +220,10 @@ extension EditorAndStorageTests {
         let window = try XCTUnwrap(removed.window)
         let button = try XCTUnwrap(window.standardWindowButton(.closeButton))
         button.performClick(nil)
-        let sheet = try XCTUnwrap(window.attachedSheet)
-        try workspace.hide()
-        XCTAssertTrue(workspace.isVisible, "Keep the group visible while confirmation is pending")
-        window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
-        for _ in 0..<100 {
-            if removed.isDeleted { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertTrue(workspace.isVisible)
+        XCTAssertTrue(retained.window!.isVisible)
+        XCTAssertTrue(tray.window!.isVisible)
         XCTAssertTrue(removed.isDeleted)
         XCTAssertNil(workspace.notes[id])
         XCTAssertNil(preferences.object(forKey: "frame.\(id)"))

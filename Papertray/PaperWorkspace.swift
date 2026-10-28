@@ -55,8 +55,6 @@ final class PaperWorkspace {
     }
 
     func hide() throws {
-        // Do not orphan a deletion confirmation sheet or dismiss it as implicit consent.
-        guard !notes.values.contains(where: { $0.window?.attachedSheet != nil }) else { return }
         // Flush every note before hiding any window. Failure leaves the whole group visible.
         for note in notes.values { try note.prepareToHide() }
         tray.hide()
