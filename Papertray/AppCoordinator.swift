@@ -4,7 +4,7 @@ import ServiceManagement
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
-    static let toggleTray = Self("toggleTray", initial: .init(.n, modifiers: [.option, .command]))
+    static let toggleTray = Self("toggleTray", initial: .init(.period, modifiers: [.option]))
 }
 
 @main
