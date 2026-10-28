@@ -14,18 +14,19 @@ final class NoteTextView: NSTextView {
     private var replacingTaskMarker = false
 
     override func draw(_ dirtyRect: NSRect) {
-        if kind == .ruled {
-            NSColor(srgbRed: 0.47, green: 0.58, blue: 0.70, alpha: 0.18).setStroke()
-            let lines = NSBezierPath()
-            let start = floor(dirtyRect.minY / 28) * 28 + 16
-            for y in stride(from: start, through: dirtyRect.maxY, by: 28) {
-                lines.move(to: NSPoint(x: 0, y: y))
-                lines.line(to: NSPoint(x: bounds.width, y: y))
-            }
-            lines.lineWidth = 0.5
-            lines.stroke()
-        }
+        if kind == .ruled { RuledPaper.draw(in: dirtyRect, editor: self) }
         super.draw(dirtyRect)
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        // Reflow can move rules outside the edited glyphs' invalidation rectangle.
+        if kind == .ruled { needsDisplay = true }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if kind == .ruled { needsDisplay = true }
     }
 
     override func becomeFirstResponder() -> Bool {

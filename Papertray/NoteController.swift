@@ -119,6 +119,8 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         guard content != noteDocument.content else { return }
         noteDocument.content = content
         noteDocument.revision += 1
+        // Native undo can bypass didChangeText; invalidate decorative layout as well.
+        editor.needsDisplay = true
         dirty = true
         window?.isDocumentEdited = true
         saveWork?.cancel()
