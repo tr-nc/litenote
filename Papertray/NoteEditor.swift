@@ -140,7 +140,12 @@ final class NoteTextView: NSTextView {
     }
 
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
-        var range = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
+        // NSTextInputClient uses NSNotFound to replace the active composition,
+        // not just its caret/selection. Resolve it before checklist normalization.
+        var range = replacementRange
+        if range.location == NSNotFound {
+            range = hasMarkedText() ? markedRange() : selectedRange()
+        }
         if kind == .checklist, range.location == 0, let storage = textStorage, storage.length > 0,
            let marker = storage.attribute(.attachment, at: 0, effectiveRange: nil) as? PaperAttachment,
            case .task = marker.value {
