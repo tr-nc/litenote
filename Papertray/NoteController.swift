@@ -16,7 +16,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     private(set) var isDeleted = false
     private var undoObservers: [NSObjectProtocol] = []
     var onFocus: ((NoteController) -> Void)?
-    var onVisibility: ((NoteController, Bool) -> Void)?
+    var onHideRequested: (() -> Void)?
     var onFrame: ((NoteController) -> Void)?
     var onDelete: ((NoteController) -> Void)?
 
@@ -100,13 +100,24 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         for observer in undoObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
-    func open() {
+    func open() { present(focus: true) }
+
+    func present(focus: Bool) {
         guard !isDeleted else { return }
-        showWindow(nil)
+        window?.orderFront(nil)
         window?.contentView?.layoutSubtreeIfNeeded()
-        window?.makeKeyAndOrderFront(nil)
-        window?.makeFirstResponder(editor)
-        onVisibility?(self, true)
+        if focus {
+            window?.makeKeyAndOrderFront(nil)
+            window?.makeFirstResponder(editor)
+        }
+    }
+
+    func prepareToHide() throws {
+        if editor.hasMarkedText() {
+            editor.unmarkText()
+            commitEditor()
+        }
+        try flush()
     }
 
     func saveInitial() throws {
@@ -201,6 +212,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if let onHideRequested { onHideRequested(); return false }
         guard !editor.importing else {
             NSApp.presentError(PapertrayError.message("图片正在导入，请完成后再关闭便笺。"))
             return false
@@ -214,7 +226,6 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         catch { NSApp.presentError(error); return false }
     }
 
-    func windowWillClose(_ notification: Notification) { onVisibility?(self, false) }
     func windowDidMove(_ notification: Notification) { onFrame?(self) }
     func windowDidResize(_ notification: Notification) { onFrame?(self) }
 }

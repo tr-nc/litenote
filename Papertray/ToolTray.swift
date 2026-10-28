@@ -4,6 +4,7 @@ import AppKit
 final class ToolTrayController: NSWindowController {
     var onCreate: ((PaperKind, NSPoint, NSPoint) -> Bool)?
     var onInk: ((Ink) -> Void)?
+    var onDismiss: (() -> Void)?
     private var papers: [PaperChoice] = []
     private var colors: [NSButton] = []
     private var preview: NSPanel?
@@ -46,7 +47,11 @@ final class ToolTrayController: NSWindowController {
         updateInk(ink)
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.hide() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.cancelDrag()
+                if self.window?.isVisible == true { self.positionOnCurrentScreen() }
+            }
         }
         resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
                                                                object: nil, queue: .main) { [weak self] _ in
@@ -61,19 +66,33 @@ final class ToolTrayController: NSWindowController {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
     }
 
-    func toggle() {
-        if window?.isVisible == true { hide(); return }
+    private func positionOnCurrentScreen() {
         let point = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.screens.first,
               let window else { return }
         let visible = screen.visibleFrame
         window.setFrameOrigin(NSPoint(x: visible.maxX - window.frame.width - 16,
                                       y: visible.maxY - window.frame.height - 16))
-        window.makeKeyAndOrderFront(nil)
+    }
+
+    func show(activate: Bool = true) {
+        positionOnCurrentScreen()
+        if activate { window?.makeKeyAndOrderFront(nil) }
+        else { window?.orderFront(nil) }
+        guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return event }
-            MainActor.assumeIsolated { self?.hide() }
-            return nil
+            guard event.keyCode == 53, let self else { return event }
+            let handled = MainActor.assumeIsolated {
+                if self.gesture.state == .pressed || self.gesture.state == .dragging {
+                    self.cancelDrag()
+                    return true
+                }
+                // Notes/IME/sheets own their Escape handling; do not steal their event.
+                guard event.window === self.window else { return false }
+                self.onDismiss?()
+                return true
+            }
+            return handled ? nil : event
         }
     }
 
@@ -120,14 +139,13 @@ final class ToolTrayController: NSWindowController {
         preview?.orderOut(nil)
         preview = nil
         guard let window, gesture.release(at: point, screens: NSScreen.screens.map(\.frame), tray: window.frame) else { return }
-        if onCreate?(draggedKind, point, anchor) == true { hide() }
+        _ = onCreate?(draggedKind, point, anchor)
     }
 
     @objc private func selectInk(_ sender: NSButton) {
         let ink = Ink.allCases[sender.tag]
         updateInk(ink)
         onInk?(ink)
-        hide()
     }
 
     private func updateInk(_ ink: Ink) {
