@@ -105,6 +105,14 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 UserDefaults.standard.set(NSStringFromRect(frame), forKey: "frame.\(controller.noteDocument.id)")
             }
         }
+        controller.onDelete = { [weak self] controller in
+            guard let self else { return }
+            let id = controller.noteDocument.id
+            self.notes.removeValue(forKey: id)
+            if self.lastEditor === controller { self.lastEditor = nil }
+            UserDefaults.standard.removeObject(forKey: self.visibleKey(id))
+            UserDefaults.standard.removeObject(forKey: "frame.\(id)")
+        }
         notes[document.id] = controller
         return controller
     }

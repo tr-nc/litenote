@@ -74,6 +74,7 @@ final class NoteStore {
     private let attachments: AttachmentStore
     private var revisions: [UUID: UInt64] = [:]
     private var blocked: Set<UUID> = []
+    private var deleted: Set<UUID> = []
 
     init(root: URL, attachments: AttachmentStore) throws {
         self.root = root
@@ -115,6 +116,7 @@ final class NoteStore {
 
     func save(_ note: NoteDocument) throws {
         try note.validate()
+        guard !deleted.contains(note.id) else { throw PapertrayError.message("这张纸已永久删除，不能再次保存。") }
         guard !blocked.contains(note.id) else { throw PapertrayError.message("损坏文档已锁定，不能覆盖。") }
         if let revision = revisions[note.id], note.revision < revision { return }
         for id in note.attachmentIDs { _ = try attachments.verifiedURL(for: id) }
@@ -130,5 +132,18 @@ final class NoteStore {
         }
         try data.write(to: url, options: .atomic)
         revisions[note.id] = note.revision
+    }
+
+    /// Remove recovery copies first: if removing the authoritative note fails, keep
+    /// its editor usable and report failure. Never touch separately owned attachments.
+    func permanentlyDelete(_ id: UUID) throws {
+        for directory in ["backups", "notes"] {
+            let url = root.appendingPathComponent("\(directory)/\(id.uuidString).json")
+            do { try FileManager.default.removeItem(at: url) }
+            catch let error as CocoaError where error.code == .fileNoSuchFile { continue }
+        }
+        deleted.insert(id)
+        revisions.removeValue(forKey: id)
+        blocked.remove(id)
     }
 }

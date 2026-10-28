@@ -13,10 +13,12 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     private let store: NoteStore
     private var saveWork: DispatchWorkItem?
     private var dirty = false
+    private(set) var isDeleted = false
     private var undoObservers: [NSObjectProtocol] = []
     var onFocus: ((NoteController) -> Void)?
     var onVisibility: ((NoteController, Bool) -> Void)?
     var onFrame: ((NoteController) -> Void)?
+    var onDelete: ((NoteController) -> Void)?
 
     init(document: NoteDocument, store: NoteStore, attachments: AttachmentStore, frame: NSRect, ink: Ink) throws {
         self.noteDocument = document
@@ -34,6 +36,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         panel.isMovableByWindowBackground = false
         super.init(window: panel)
         panel.delegate = self
+        installDeleteButton(on: panel)
 
         let surface = PaperSurface(kind: document.content.kind)
         panel.contentView = surface
@@ -98,6 +101,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func open() {
+        guard !isDeleted else { return }
         showWindow(nil)
         window?.contentView?.layoutSubtreeIfNeeded()
         window?.makeKeyAndOrderFront(nil)
@@ -113,7 +117,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     func textDidChange(_ notification: Notification) { commitEditor() }
 
     private func commitEditor() {
-        guard !editor.hasMarkedText() else { return }
+        guard !isDeleted, !editor.hasMarkedText() else { return }
         let firstID: UUID
         if case .checklist(let items) = noteDocument.content { firstID = items.first?.id ?? UUID() }
         else { firstID = UUID() }
@@ -137,6 +141,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func flush() throws {
+        guard !isDeleted else { return }
         commitEditor()
         saveWork?.cancel()
         guard dirty else { return }
@@ -144,6 +149,55 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         dirty = false
         window?.isDocumentEdited = false
         window?.title = noteDocument.content.kind.title
+    }
+
+    private func installDeleteButton(on panel: NSWindow) {
+        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            panel.standardWindowButton(type)?.isHidden = true
+        }
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 28))
+        let button = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "永久删除")!,
+                              target: self, action: #selector(requestDeletion))
+        button.frame = NSRect(x: 6, y: 2, width: 28, height: 24)
+        button.isBordered = false
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = "永久删除这张纸"
+        button.setAccessibilityLabel("永久删除这张纸")
+        accessory.view.addSubview(button)
+        panel.addTitlebarAccessoryViewController(accessory)
+    }
+
+    @objc private func requestDeletion() {
+        guard !isDeleted, let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "永久删除这张纸？"
+        alert.informativeText = "正文和备份将被删除，无法撤销。已导出的图片附件会保留，避免旧路径失效。"
+        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: "永久删除")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertSecondButtonReturn, let self else { return }
+            do { try self.permanentlyDelete() }
+            catch { self.editor.reportError(error) }
+        }
+    }
+
+    /// Called only after explicit confirmation. A failed deletion leaves memory,
+    /// pending autosave and the window intact; a successful one cannot be undone.
+    func permanentlyDelete() throws {
+        guard !isDeleted else { return }
+        guard !editor.importing else { throw PapertrayError.message("图片正在导入，请完成后再删除。") }
+        try store.permanentlyDelete(noteDocument.id)
+        isDeleted = true
+        saveWork?.cancel()
+        dirty = false
+        editor.isEditable = false
+        editor.undoManager?.removeAllActions()
+        window?.isDocumentEdited = false
+        onDelete?(self)
+        window?.close()
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
