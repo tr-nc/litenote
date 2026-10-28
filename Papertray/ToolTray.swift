@@ -38,7 +38,6 @@ final class ToolTrayController: NSWindowController {
             button.tag = index
             button.frame = NSRect(x: 19 + index * 44, y: 14, width: 36, height: 32)
             button.bezelStyle = .regularSquare
-            button.contentTintColor = color.color
             button.font = .systemFont(ofSize: 22)
             button.setAccessibilityLabel("\(color.title)色笔")
             colors.append(button)
@@ -151,8 +150,14 @@ final class ToolTrayController: NSWindowController {
 
     private func updateInk(_ ink: Ink) {
         for (index, button) in colors.enumerated() {
-            let selected = Ink.allCases[index] == ink
-            button.title = selected ? "◉" : "●"
+            let color = Ink.allCases[index]
+            let selected = color == ink
+            // These swatches are text glyphs; contentTintColor does not color
+            // regular-square button titles. Set the text color on every update.
+            button.attributedTitle = NSAttributedString(string: selected ? "◉" : "●", attributes: [
+                .foregroundColor: color.color,
+                .font: NSFont.systemFont(ofSize: 22)
+            ])
             button.setAccessibilityValue(selected ? "已选择" : "未选择")
         }
     }
