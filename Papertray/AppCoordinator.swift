@@ -25,7 +25,6 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var attachments: AttachmentStore!
     private var tray: ToolTrayController!
     private var workspace: PaperWorkspace!
-    private weak var lastEditor: NoteController?
     private var settings: NSWindowController?
     private var ink: Ink = Ink(rawValue: UserDefaults.standard.string(forKey: "ink") ?? "") ?? .graphite
     private var screenObserver: NSObjectProtocol?
@@ -56,10 +55,10 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self else { return }
                 self.ink = ink
                 UserDefaults.standard.set(ink.rawValue, forKey: "ink")
-                guard self.lastEditor?.isDeleted != true else { self.lastEditor = nil; return }
-                self.lastEditor?.editor.ink = ink
-                self.lastEditor?.window?.makeKeyAndOrderFront(nil)
-                self.lastEditor?.window?.makeFirstResponder(self.lastEditor?.editor)
+                if let note = self.workspace.lastFocusedNote {
+                    note.editor.ink = ink
+                    note.open()
+                }
             }
             let loaded = store.loadAll()
             for document in loaded.notes {
@@ -96,7 +95,6 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func makeController(_ document: NoteDocument, frame: NSRect) throws -> NoteController {
         let controller = try NoteController(document: document, store: store, attachments: attachments, frame: frame, ink: ink)
-        controller.onFocus = { [weak self] in self?.lastEditor = $0 }
         controller.onFrame = { controller in
             if let frame = controller.window?.frame {
                 UserDefaults.standard.set(NSStringFromRect(frame), forKey: "frame.\(controller.noteDocument.id)")

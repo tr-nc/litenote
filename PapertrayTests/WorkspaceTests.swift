@@ -49,6 +49,124 @@ extension EditorAndStorageTests {
         }
     }
 
+    private func withFocusedWorkspace(_ body: (PaperWorkspace, ToolTrayController) async throws -> Void) async rethrows {
+        let name = "local.papertray.focus-tests.\(UUID())"
+        let preferences = UserDefaults(suiteName: name)!
+        let tray = ToolTrayController(ink: .blue)
+        let workspace = PaperWorkspace(tray: tray, preferences: preferences)
+        defer {
+            tray.hide()
+            for note in workspace.notes.values { note.window?.orderOut(nil) }
+            preferences.removePersistentDomain(forName: name)
+        }
+        try await body(workspace, tray)
+    }
+
+    private func waitForKeyWindow(_ window: NSWindow, file: StaticString = #filePath, line: UInt = #line) async throws {
+        // App activation and WindowServer focus changes complete on the run loop.
+        for _ in 0..<100 {
+            if window.isKeyWindow { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(window.isKeyWindow, "Window did not receive keyboard focus", file: file, line: line)
+    }
+
+    func testWorkspaceToggleRestoresLastPaperAndTypingAtItsSelection() async throws {
+        try await withFocusedWorkspace { workspace, tray in
+            let ruled = try editor(kind: .ruled)
+            let checklist = try editor()
+            ruled.editor.insertText("前后", replacementRange: ruled.editor.selectedRange())
+            checklist.editor.insertText("待办", replacementRange: checklist.editor.selectedRange())
+            workspace.add(ruled)
+            workspace.add(checklist)
+            workspace.show(focusing: ruled.noteDocument.id)
+            try await waitForKeyWindow(ruled.window!)
+            // Both editors already have a first responder; switching windows must
+            // still update the remembered paper, without refocusing the text view.
+            for note in [checklist, ruled, checklist, ruled] {
+                let window = try XCTUnwrap(note.window)
+                window.makeKeyAndOrderFront(nil)
+                try await waitForKeyWindow(window)
+                XCTAssertTrue(workspace.lastFocusedNote === note)
+                let selection = NSRange(location: 1, length: 0)
+                note.editor.setSelectedRange(selection)
+                let frame = window.frame
+                let scrollOrigin = note.editor.enclosingScrollView?.contentView.bounds.origin
+                // Visiting the tray must not replace the last paper.
+                tray.window?.makeKeyAndOrderFront(nil)
+                try workspace.toggle()
+                try workspace.toggle()
+                try await waitForKeyWindow(window)
+                XCTAssertTrue(window.isKeyWindow)
+                XCTAssertTrue(window.firstResponder === note.editor)
+                XCTAssertEqual(note.editor.selectedRange(), selection)
+                XCTAssertEqual(window.frame, frame)
+                XCTAssertEqual(note.editor.enclosingScrollView?.contentView.bounds.origin, scrollOrigin)
+                XCTAssertFalse(tray.window!.isKeyWindow)
+                XCTAssertTrue(workspace.lastFocusedNote === note)
+            }
+            let window = try XCTUnwrap(ruled.window)
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                                      timestamp: 0, windowNumber: window.windowNumber,
+                                                      context: nil, characters: "x", charactersIgnoringModifiers: "x",
+                                                      isARepeat: false, keyCode: 7))
+            window.sendEvent(event)
+            XCTAssertEqual(ruled.editor.string, "前x后")
+            ruled.editor.cancelOperation(nil)
+            XCTAssertFalse(workspace.isVisible)
+            try workspace.toggle()
+            try await waitForKeyWindow(window)
+            XCTAssertTrue(window.firstResponder === ruled.editor)
+            XCTAssertEqual(ruled.editor.selectedRange(), NSRange(location: 2, length: 0))
+        }
+    }
+
+    func testExplicitPaperSelectionOverridesRecallAndDeletedPaperIsNotRestored() async throws {
+        try await withFocusedWorkspace { workspace, tray in
+            let a = try editor(kind: .ruled)
+            let b = try editor()
+            workspace.add(a)
+            workspace.add(b)
+            workspace.show(focusing: a.noteDocument.id)
+            try await waitForKeyWindow(a.window!)
+            workspace.show(focusing: b.noteDocument.id)
+            try await waitForKeyWindow(b.window!)
+            try workspace.toggle()
+            try workspace.toggle()
+            try await waitForKeyWindow(b.window!)
+            try b.permanentlyDelete()
+            try workspace.toggle()
+            try workspace.toggle()
+            try await waitForKeyWindow(a.window!)
+            XCTAssertTrue(a.window!.firstResponder === a.editor)
+            XCTAssertFalse(b.window!.isVisible)
+            try a.permanentlyDelete()
+            try workspace.toggle()
+            try workspace.toggle()
+            try await waitForKeyWindow(tray.window!)
+            XCTAssertTrue(workspace.notes.isEmpty)
+        }
+    }
+
+    func testWorkspacePresentationWithoutActivationDoesNotStealFocus() async throws {
+        try await withFocusedWorkspace { workspace, _ in
+            let note = try editor(kind: .ruled)
+            workspace.add(note)
+            workspace.show(focusing: note.noteDocument.id)
+            try await waitForKeyWindow(note.window!)
+            try workspace.hide()
+            let other = try editor()
+            other.open()
+            try await waitForKeyWindow(other.window!)
+            workspace.show(activate: false)
+            XCTAssertTrue(other.window!.isKeyWindow)
+            XCTAssertFalse(note.window!.isKeyWindow)
+            try workspace.hide()
+            workspace.show()
+            try await waitForKeyWindow(note.window!)
+        }
+    }
+
     func testWorkspaceWindowsDisableAutomaticAnimationBeforeFirstShowAndAfterToggling() throws {
         try withWorkspace { workspace, tray, _ in
             let ruled = try editor(kind: .ruled)

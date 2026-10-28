@@ -92,7 +92,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
             })
         }
         editor.onFocus = { [weak self] in
-            guard let self else { return }
+            guard let self, self.window?.isKeyWindow == true else { return }
             self.onFocus?(self)
         }
         editor.onHideRequested = { [weak self] in self?.requestHide() }
@@ -216,6 +216,10 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
             window?.orderOut(nil)
         } catch { NSApp.presentError(error) }
     }
+
+    // Returning to a paper can leave the same text view as first responder,
+    // so editor.becomeFirstResponder alone does not observe every focus change.
+    func windowDidBecomeKey(_ notification: Notification) { onFocus?(self) }
 
     func windowDidMove(_ notification: Notification) { onFrame?(self) }
     func windowDidResize(_ notification: Notification) { onFrame?(self) }
