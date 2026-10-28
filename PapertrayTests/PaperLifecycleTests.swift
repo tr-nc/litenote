@@ -3,18 +3,23 @@ import XCTest
 @testable import Papertray
 
 extension EditorAndStorageTests {
-    func testPaperTitlebarHasOnlyPermanentDeleteActionAndCancellationPreservesNote() async throws {
+    func testNativeCloseButtonRequestsDeletionAndCancellationPreservesNote() async throws {
         let controller = try editor(kind: .ruled)
         controller.editor.insertText("保留内容", replacementRange: controller.editor.selectedRange())
         try controller.flush()
         controller.showWindow(nil)
         let window = try XCTUnwrap(controller.window)
-        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+        for type: NSWindow.ButtonType in [.miniaturizeButton, .zoomButton] {
             XCTAssertTrue(window.standardWindowButton(type)?.isHidden ?? true)
         }
-        let buttons = window.titlebarAccessoryViewControllers.flatMap { $0.view.subviews.compactMap { $0 as? NSButton } }
-        XCTAssertEqual(buttons.count, 1)
-        let button = try XCTUnwrap(buttons.first)
+        XCTAssertTrue(window.titlebarAccessoryViewControllers.isEmpty)
+        let button = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        XCTAssertFalse(button.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(button.isEnabled)
+        let frame = button.convert(button.bounds, to: nil)
+        XCTAssertLessThan(frame.midX, window.frame.width / 2)
+        XCTAssertGreaterThan(frame.midY, window.contentLayoutRect.maxY)
+        XCTAssertEqual(button.toolTip, "永久删除这张纸")
         XCTAssertEqual(button.accessibilityLabel(), "永久删除这张纸")
         button.performClick(nil)
         let sheet = try XCTUnwrap(window.attachedSheet)

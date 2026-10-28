@@ -16,7 +16,9 @@ extension EditorAndStorageTests {
             try await Task.sleep(for: .milliseconds(50))
             assertVisibleCheckboxes(controller, count: 1)
         }
-        controller.window?.performClose(nil)
+        view.cancelOperation(nil)
+        XCTAssertFalse(controller.window!.isVisible)
+        XCTAssertNil(controller.window?.attachedSheet)
         controller.showWindow(nil)
         try await Task.sleep(for: .milliseconds(100))
         assertVisibleCheckboxes(controller, count: 1)

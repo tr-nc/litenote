@@ -95,6 +95,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
             guard let self else { return }
             self.onFocus?(self)
         }
+        editor.onHideRequested = { [weak self] in self?.requestHide() }
         editor.beforeCopy = { [weak self] in try self?.flush() }
         editor.setSelectedRange(NSRange(location: text.length, length: 0))
         editor.invalidatePaper()
@@ -170,24 +171,18 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     private func installDeleteButton(on panel: NSWindow) {
-        for type: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+        for type: NSWindow.ButtonType in [.miniaturizeButton, .zoomButton] {
             panel.standardWindowButton(type)?.isHidden = true
         }
-        let accessory = NSTitlebarAccessoryViewController()
-        accessory.layoutAttribute = .right
-        accessory.view = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 28))
-        let button = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "永久删除")!,
-                              target: self, action: #selector(requestDeletion))
-        button.frame = NSRect(x: 6, y: 2, width: 28, height: 24)
-        button.isBordered = false
-        button.contentTintColor = .secondaryLabelColor
+        // Keep AppKit's native placement, appearance and close action.
+        // The window delegate asks for deletion confirmation.
+        guard let button = panel.standardWindowButton(.closeButton) else { return }
+        button.isHidden = false
         button.toolTip = "永久删除这张纸"
         button.setAccessibilityLabel("永久删除这张纸")
-        accessory.view.addSubview(button)
-        panel.addTitlebarAccessoryViewController(accessory)
     }
 
-    @objc private func requestDeletion() {
+    private func requestDeletion() {
         guard !isDeleted, let window, window.attachedSheet == nil else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -219,18 +214,20 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if let onHideRequested { onHideRequested(); return false }
+        requestDeletion()
+        return false
+    }
+
+    private func requestHide() {
+        if let onHideRequested { onHideRequested(); return }
         guard !editor.importing else {
             NSApp.presentError(PapertrayError.message("图片正在导入，请完成后再关闭便笺。"))
-            return false
+            return
         }
-        guard !editor.hasMarkedText() else {
-            editor.unmarkText()
-            textDidChange(Notification(name: NSText.didChangeNotification))
-            return windowShouldClose(sender)
-        }
-        do { try flush(); return true }
-        catch { NSApp.presentError(error); return false }
+        do {
+            try prepareToHide()
+            window?.orderOut(nil)
+        } catch { NSApp.presentError(error) }
     }
 
     func windowDidMove(_ notification: Notification) { onFrame?(self) }

@@ -133,7 +133,7 @@ extension EditorAndStorageTests {
         }
     }
 
-    func testEscOrWindowCloseRequestsHideTheWholeWorkspaceNotDeletePaper() throws {
+    func testEscOrTrayDismissalHidesTheWholeWorkspaceNotDeletePaper() throws {
         try withWorkspace { workspace, tray, _ in
             let a = try editor(kind: .ruled)
             let b = try editor()
@@ -141,6 +141,7 @@ extension EditorAndStorageTests {
             workspace.add(b)
             workspace.show(activate: false)
             a.editor.cancelOperation(nil)
+            XCTAssertNil(a.window?.attachedSheet)
             XCTAssertFalse(workspace.isVisible)
             XCTAssertFalse(tray.window!.isVisible)
             XCTAssertFalse(b.window!.isVisible)
@@ -217,7 +218,7 @@ extension EditorAndStorageTests {
         let id = removed.noteDocument.id
         preferences.set("old frame", forKey: "frame.\(id)")
         let window = try XCTUnwrap(removed.window)
-        let button = try XCTUnwrap(window.titlebarAccessoryViewControllers.first?.view.subviews.first as? NSButton)
+        let button = try XCTUnwrap(window.standardWindowButton(.closeButton))
         button.performClick(nil)
         let sheet = try XCTUnwrap(window.attachedSheet)
         try workspace.hide()

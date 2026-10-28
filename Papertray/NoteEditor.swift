@@ -10,6 +10,7 @@ final class NoteTextView: NSTextView {
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
     var beforeCopy: () throws -> Void = {}
     var onFocus: () -> Void = {}
+    var onHideRequested: () -> Void = {}
     var onPresentationChange: () -> Void = {}
     private(set) var importing = false
 
@@ -217,7 +218,7 @@ final class NoteTextView: NSTextView {
 
     override func cancelOperation(_ sender: Any?) {
         if hasMarkedText() { super.cancelOperation(sender) }
-        else { window?.performClose(sender) }
+        else { onHideRequested() }
     }
 }
 
