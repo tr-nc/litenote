@@ -1,6 +1,7 @@
 import AppKit
 
 final class NoteTextView: NSTextView {
+    private static let imagePasteTypes: [NSPasteboard.PasteboardType] = [.png, .tiff]
     var attachments: AttachmentStore!
     var clipboard: NSPasteboard = .general
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
@@ -54,11 +55,24 @@ final class NoteTextView: NSTextView {
         } catch { reportError(error) }
     }
 
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(paste(_:))
+            || menuItem.action == #selector(pasteAsPlainText(_:))
+            || menuItem.action == #selector(pasteAsRichText(_:)) {
+            // Native validation follows importsGraphics, but our own importer
+            // supports bitmaps without enabling native rich-text/image imports.
+            // Inspect formats only: menu updates must not read or decode payloads.
+            return isEditable && !importing
+                && clipboard.availableType(from: Self.imagePasteTypes + [.string]) != nil
+        }
+        return super.validateMenuItem(menuItem)
+    }
+
     override func paste(_ sender: Any?) {
-        guard !importing else { NSSound.beep(); return }
+        guard isEditable, !importing else { NSSound.beep(); return }
         let pasteboard = clipboard
         // Explicit paste only. File URL payloads are not read as arbitrary local files.
-        if let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) {
+        if let data = Self.imagePasteTypes.lazy.compactMap({ pasteboard.data(forType: $0) }).first {
             let selection = selectedRange()
             let snapshot = attributedString()
             importing = true
