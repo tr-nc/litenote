@@ -1,6 +1,8 @@
 import Foundation
 
-enum PaperKind: String, Codable, CaseIterable {
+// Checklist cases remain decodable only to preserve legacy files during adoption.
+// The application opens and edits a single ruled document.
+enum PaperKind: String, Codable {
     case ruled, checklist
     var title: String { self == .ruled ? "横线纸" : "待办纸" }
 }

@@ -74,12 +74,11 @@ final class NoteStore {
     private let attachments: AttachmentStore
     private var revisions: [UUID: UInt64] = [:]
     private var blocked: Set<UUID> = []
-    private var deleted: Set<UUID> = []
 
     init(root: URL, attachments: AttachmentStore) throws {
         self.root = root
         self.attachments = attachments
-        for name in ["notes", "backups", "trash"] {
+        for name in ["notes", "backups"] {
             try FileManager.default.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: true)
         }
     }
@@ -92,21 +91,8 @@ final class NoteStore {
                                                                   includingPropertiesForKeys: nil)
             for url in urls where url.pathExtension == "json" {
                 do {
-                    let data = try Data(contentsOf: url)
-                    // Newer schemas are never silently recovered from an older backup.
-                    let header = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                    guard header?["schemaVersion"] as? Int == 1 else {
-                        throw PapertrayError.message("文档版本不受支持。")
-                    }
-                    let note = try JSONDecoder().decode(NoteDocument.self, from: data)
-                    try note.validate()
-                    guard url.deletingPathExtension().lastPathComponent == note.id.uuidString else {
-                        throw PapertrayError.message("文档身份与文件名不匹配。")
-                    }
-                    revisions[note.id] = note.revision
-                    notes.append(note)
+                    notes.append(try load(from: url))
                 } catch {
-                    if let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) { blocked.insert(id) }
                     errors.append("\(url.lastPathComponent)：\(error.localizedDescription)（原文件和备份已保留）")
                 }
             }
@@ -116,11 +102,10 @@ final class NoteStore {
 
     func save(_ note: NoteDocument) throws {
         try note.validate()
-        guard !deleted.contains(note.id) else { throw PapertrayError.message("这张纸已永久删除，不能再次保存。") }
         guard !blocked.contains(note.id) else { throw PapertrayError.message("损坏文档已锁定，不能覆盖。") }
         if let revision = revisions[note.id], note.revision < revision { return }
         for id in note.attachmentIDs { _ = try attachments.verifiedURL(for: id) }
-        let url = root.appendingPathComponent("notes/\(note.id.uuidString).json")
+        let url = noteURL(note.id)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(note)
@@ -134,16 +119,64 @@ final class NoteStore {
         revisions[note.id] = note.revision
     }
 
-    /// Remove recovery copies first: if removing the authoritative note fails, keep
-    /// its editor usable and report failure. Never touch separately owned attachments.
-    func permanentlyDelete(_ id: UUID) throws {
-        for directory in ["backups", "notes"] {
-            let url = root.appendingPathComponent("\(directory)/\(id.uuidString).json")
-            do { try FileManager.default.removeItem(at: url) }
-            catch let error as CocoaError where error.code == .fileNoSuchFile { continue }
+    /// A durable reference pins one paper independently of window preferences.
+    /// Legacy files are read only during first adoption and are never removed.
+    func loadPaper() throws -> NoteDocument {
+        let referenceURL = root.appendingPathComponent("paper.json")
+        if FileManager.default.fileExists(atPath: referenceURL.path) {
+            let reference = try JSONDecoder().decode(PaperReference.self, from: Data(contentsOf: referenceURL))
+            let note = try load(from: noteURL(reference.documentID))
+            guard note.content.kind == .ruled else {
+                throw PapertrayError.message("固定纸张不是横线纸；原文件已保留，未创建替代文档。")
+            }
+            return note
         }
-        deleted.insert(id)
-        revisions.removeValue(forKey: id)
-        blocked.remove(id)
+
+        let legacy = loadAll()
+        guard legacy.errors.isEmpty else {
+            throw PapertrayError.message(legacy.errors.joined(separator: "\n"))
+        }
+        // createdAt is not last-edited time in schema v1. Use the actual file's
+        // modification date, with UUID as a deterministic tie breaker.
+        let candidates = try legacy.notes.filter { $0.content.kind == .ruled }.map { note in
+            (note, try noteURL(note.id).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? note.createdAt)
+        }
+        let selected = candidates.max {
+            $0.1 == $1.1 ? $0.0.id.uuidString < $1.0.id.uuidString : $0.1 < $1.1
+        }?.0
+        let note = selected ?? NoteDocument(kind: .ruled)
+        if selected == nil { try save(note) }
+        // Pin only after the document exists. A failed read/save never turns the
+        // user's paper into an empty replacement or revives a different old note.
+        try JSONEncoder().encode(PaperReference(documentID: note.id)).write(to: referenceURL, options: .atomic)
+        return note
+    }
+
+    private struct PaperReference: Codable {
+        let documentID: UUID
+    }
+
+    private func noteURL(_ id: UUID) -> URL {
+        root.appendingPathComponent("notes/\(id.uuidString).json")
+    }
+
+    private func load(from url: URL) throws -> NoteDocument {
+        do {
+            let data = try Data(contentsOf: url)
+            let header = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard header?["schemaVersion"] as? Int == 1 else {
+                throw PapertrayError.message("文档版本不受支持。")
+            }
+            let note = try JSONDecoder().decode(NoteDocument.self, from: data)
+            try note.validate()
+            guard url.deletingPathExtension().lastPathComponent == note.id.uuidString else {
+                throw PapertrayError.message("文档身份与文件名不匹配。")
+            }
+            revisions[note.id] = note.revision
+            return note
+        } catch {
+            if let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) { blocked.insert(id) }
+            throw error
+        }
     }
 }

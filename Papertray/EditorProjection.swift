@@ -5,36 +5,21 @@ extension NSAttributedString.Key {
     static let papertrayInk = Self("local.papertray.ink")
 }
 
-/// Immutable editor projection; authoritative checked state lives in NoteDocument.
 final class PaperAttachment: NSTextAttachment {
-    enum Value {
-        case image(UUID)
-        case task(UUID, Bool)
-    }
-    let value: Value
+    let id: UUID
 
-    init(value: Value) {
-        self.value = value
-        switch value {
-        case .task:
-            super.init(data: nil, ofType: nil)
-            // A zero-width semantic boundary, not an interactive checkbox. The stable
-            // control lives in ChecklistDocumentView's gutter, outside text selection.
-            image = NSImage(size: NSSize(width: 1, height: 1))
-            bounds = NSRect(x: 0, y: 0, width: 0, height: 1)
-        case .image:
-            super.init(data: nil, ofType: nil)
-        }
+    init(id: UUID) {
+        self.id = id
+        super.init(data: nil, ofType: nil)
     }
 
     required init?(coder: NSCoder) { return nil }
-
     override var usesTextAttachmentView: Bool { false }
 
     override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: any NSTextLocation,
                                    textContainer: NSTextContainer?, proposedLineFragment: NSRect,
                                    position: NSPoint) -> NSRect {
-        guard case .image = value, bounds.width > 0 else { return bounds }
+        guard bounds.width > 0 else { return bounds }
         let scale = min(1, max(1, proposedLineFragment.width) / bounds.width)
         return NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width * scale, height: bounds.height * scale)
     }
@@ -43,20 +28,11 @@ final class PaperAttachment: NSTextAttachment {
 enum EditorProjection {
     static func attributes(ink: Ink = .graphite) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        // A minimum line box also applies to TextKit 2's trailing empty line.
-        // Additive lineSpacing is dropped by that layout path after deleting the
-        // last glyph, moving both the caret and paper rules upward. No maximum:
-        // tall attachments and fallback glyphs must still expand their own line.
+        // Unlike additive lineSpacing, this also applies to the trailing empty
+        // line after deletion. No maximum: tall attachments still expand the line.
         paragraph.minimumLineHeight = 25
         return [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: PaperPalette.ink,
                 .papertrayInk: ink.rawValue, .paragraphStyle: paragraph]
-    }
-
-    static func task(_ item: TaskItem) -> NSAttributedString {
-        let attachment = PaperAttachment(value: .task(item.id, item.isChecked))
-        let result = NSMutableAttributedString(attachment: attachment)
-        result.addAttributes(attributes(ink: .graphite), range: NSRange(location: 0, length: result.length))
-        return result
     }
 
     static func image(_ id: UUID, store: AttachmentStore) throws -> NSAttributedString {
@@ -66,7 +42,7 @@ enum EditorProjection {
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: 720
               ] as CFDictionary) else { throw PapertrayError.message("无法读取附件图片。") }
-        let attachment = PaperAttachment(value: .image(id))
+        let attachment = PaperAttachment(id: id)
         let size = NSSize(width: thumbnail.width, height: thumbnail.height)
         attachment.image = NSImage(cgImage: thumbnail, size: size)
         let scale = min(1, 260 / size.width)
@@ -75,75 +51,40 @@ enum EditorProjection {
     }
 
     static func render(_ content: NoteContent, store: AttachmentStore) throws -> NSAttributedString {
-        let result = NSMutableAttributedString(string: "")
-        func append(_ runs: [Run]) throws {
-            for run in runs {
-                switch run {
-                case .text(let text, let ink):
-                    result.append(NSAttributedString(string: text, attributes: attributes(ink: ink)))
-                case .image(let id): result.append(try image(id, store: store))
-                }
-            }
+        guard case .ruled(let runs) = content else {
+            throw PapertrayError.message("仅支持编辑固定横线纸；旧版待办文件未被修改。")
         }
-        switch content {
-        case .ruled(let body): try append(body)
-        case .checklist(let tasks):
-            for (index, item) in tasks.enumerated() {
-                if index > 0 { result.append(NSAttributedString(string: "\n", attributes: attributes(ink: .graphite))) }
-                result.append(task(item))
-                try append(item.body)
+        let result = NSMutableAttributedString(string: "")
+        for run in runs {
+            switch run {
+            case .text(let text, let ink):
+                result.append(NSAttributedString(string: text, attributes: attributes(ink: ink)))
+            case .image(let id): result.append(try image(id, store: store))
             }
         }
         return result
     }
 
-    /// One editor, arbitrary paragraphs per task. Only explicit task attachments split tasks.
-    static func parse(_ text: NSAttributedString, kind: PaperKind, firstTaskID: UUID) -> NoteContent {
-        var body: [Run] = []
-        var tasks: [TaskItem] = []
-        var current = TaskItem(id: firstTaskID)
-        var sawTask = false
-
-        func appendText(_ value: String, ink: Ink) {
-            guard !value.isEmpty else { return }
-            if let last = body.last, case .text(let previous, let previousInk) = last, previousInk == ink {
-                body[body.count - 1] = .text(previous + value, ink)
-            } else { body.append(.text(value, ink)) }
-        }
-        func finishTask(stripSeparator: Bool) {
-            if stripSeparator, let last = body.last, case .text(var value, let ink) = last, value.hasSuffix("\n") {
-                value.removeLast()
-                body.removeLast()
-                if !value.isEmpty { body.append(.text(value, ink)) }
-            }
-            current.body = body
-            tasks.append(current)
-            body = []
-        }
-
+    static func parse(_ text: NSAttributedString) -> NoteContent {
+        var runs: [Run] = []
         text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
             if let attachment = attributes[.attachment] as? PaperAttachment {
-                switch attachment.value {
-                case .image(let id): body.append(.image(id))
-                case .task(let id, let checked):
-                    guard kind == .checklist else { return }
-                    if sawTask || !body.isEmpty { finishTask(stripSeparator: true) }
-                    current = TaskItem(id: id, isChecked: checked)
-                    sawTask = true
-                }
+                runs.append(.image(attachment.id))
             } else {
+                let value = (text.string as NSString).substring(with: range)
+                guard !value.isEmpty else { return }
                 let ink = (attributes[.papertrayInk] as? String).flatMap(Ink.init(rawValue:)) ?? .graphite
-                appendText((text.string as NSString).substring(with: range), ink: ink)
+                if let last = runs.last, case .text(let previous, let previousInk) = last, previousInk == ink {
+                    runs[runs.count - 1] = .text(previous + value, ink)
+                } else { runs.append(.text(value, ink)) }
             }
         }
-        if kind == .ruled { return .ruled(body) }
-        finishTask(stripSeparator: false)
-        return .checklist(tasks)
+        return .ruled(runs)
     }
 }
 
 enum ClipboardExporter {
-    /// Uses actual UTF-16 selection ranges supplied by NSTextView, never the whole model by default.
+    /// Uses actual UTF-16 selection ranges, never the whole document by default.
     static func text(from source: NSAttributedString, range: NSRange,
                      store: AttachmentStore) throws -> String {
         guard range.location >= 0, range.length >= 0,
@@ -156,13 +97,9 @@ enum ClipboardExporter {
         selected.enumerateAttributes(in: NSRange(location: 0, length: selected.length)) { attributes, subrange, stop in
             do {
                 if let attachment = attributes[.attachment] as? PaperAttachment {
-                    switch attachment.value {
-                    case .task(_, let checked): output += checked ? "☑ " : "☐ "
-                    case .image(let id):
-                        let path = try store.verifiedURL(for: id).path
-                        if !output.isEmpty && !output.hasSuffix("\n") { output += "\n" }
-                        output += path + "\n"
-                    }
+                    let path = try store.verifiedURL(for: attachment.id).path
+                    if !output.isEmpty && !output.hasSuffix("\n") { output += "\n" }
+                    output += path + "\n"
                 } else {
                     output += (selected.string as NSString).substring(with: subrange)
                 }

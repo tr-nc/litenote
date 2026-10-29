@@ -35,9 +35,6 @@ extension EditorAndStorageTests {
 
     func testAppearanceUpdatesAllExistingAndNewSurfacesWithoutChangingTheDocument() throws {
         let ruled = try editor(kind: .ruled)
-        let checklist = try editor()
-        let tray = ToolTrayController(glass: glass)
-        defer { tray.hide() }
         ruled.editor.insertText("白字与玻璃", replacementRange: ruled.editor.selectedRange())
         ruled.editor.setSelectedRange(NSRange(location: 1, length: 2))
         let document = ruled.noteDocument
@@ -48,7 +45,7 @@ extension EditorAndStorageTests {
         style.grainSize = 1.5
         glass.update(style)
         let next = try editor(kind: .ruled)
-        for controller in [ruled, checklist, next] {
+        for controller in [ruled, next] {
             let window = try XCTUnwrap(controller.window)
             XCTAssertFalse(window.isOpaque)
             XCTAssertEqual(window.backgroundColor, .clear)
@@ -66,8 +63,6 @@ extension EditorAndStorageTests {
             XCTAssertLessThanOrEqual(scroll.frame.maxY, window.contentLayoutRect.maxY + 0.5,
                                      "The glass extends under the titlebar, not the text editor")
         }
-        let traySurface = try XCTUnwrap(tray.window?.contentView as? GlassSurface)
-        XCTAssertEqual(traySurface.subviews.compactMap { $0 as? GlassTexture }.first?.style, style)
         XCTAssertEqual(ruled.noteDocument, document)
         XCTAssertEqual(ruled.editor.selectedRange(), selection)
     }

@@ -1,18 +1,15 @@
 import AppKit
 
 final class NoteTextView: NSTextView {
-    var kind: PaperKind = .ruled
     var attachments: AttachmentStore!
     var clipboard: NSPasteboard = .general
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
     var beforeCopy: () throws -> Void = {}
-    var onFocus: () -> Void = {}
     var onHideRequested: () -> Void = {}
-    var onPresentationChange: () -> Void = {}
     private(set) var importing = false
 
     override func draw(_ dirtyRect: NSRect) {
-        if kind == .ruled { RuledPaper.draw(in: dirtyRect, editor: self) }
+        RuledPaper.draw(in: dirtyRect, editor: self)
         super.draw(dirtyRect)
     }
 
@@ -30,13 +27,6 @@ final class NoteTextView: NSTextView {
     func invalidatePaper() {
         // Reflow and undo can move decoration outside the edited glyphs' rectangle.
         needsDisplay = true
-        onPresentationChange()
-    }
-
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted { onFocus() }
-        return accepted
     }
 
     override func copy(_ sender: Any?) {
@@ -103,14 +93,6 @@ final class NoteTextView: NSTextView {
     override func pasteAsPlainText(_ sender: Any?) { paste(sender) }
     override func pasteAsRichText(_ sender: Any?) { paste(sender) }
 
-    override func insertNewline(_ sender: Any?) {
-        guard kind == .checklist, !hasMarkedText() else { super.insertNewline(sender); return }
-        let value = NSMutableAttributedString(string: "\n", attributes: EditorProjection.attributes())
-        value.append(EditorProjection.task(TaskItem()))
-        insertText(value, replacementRange: selectedRange())
-        typingAttributes = EditorProjection.attributes()
-    }
-
     override func insertLineBreak(_ sender: Any?) {
         insertText(NSAttributedString(string: "\n", attributes: EditorProjection.attributes()),
                    replacementRange: selectedRange())
@@ -122,39 +104,12 @@ final class NoteTextView: NSTextView {
         } else { super.keyDown(with: event) }
     }
 
-    // The first checkbox is a structural root: deleting all content leaves one empty task.
-    // Subsequent markers can be removed; their bodies merge into the preceding item.
-    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        if kind == .checklist {
-            if affectedCharRange.location == 0, affectedCharRange.length > 0 { return false }
-            // Native word/line deletion must not strand a task marker inside a paragraph.
-            // The ordinary insert/delete paths below merge the boundary as one edit.
-            if isTaskMarker(at: NSMaxRange(affectedCharRange)),
-               replacementString?.hasSuffix("\n") != true,
-               !hasNewline(before: affectedCharRange.location) { return false }
-        }
-        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
-    }
-
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
         // NSTextInputClient uses NSNotFound to replace the active composition,
-        // not just its caret/selection. Resolve it before checklist normalization.
+        // not just its caret/selection. Resolve it before inserting the candidate.
         var range = replacementRange
         if range.location == NSNotFound {
             range = hasMarkedText() ? markedRange() : selectedRange()
-        }
-        if kind == .checklist, range.location == 0, let storage = textStorage, storage.length > 0,
-           let marker = storage.attribute(.attachment, at: 0, effectiveRange: nil) as? PaperAttachment,
-           case .task = marker.value {
-            range = NSRange(location: 1, length: max(0, range.length - 1))
-        }
-        if kind == .checklist {
-            if range.length == 0, isTaskMarker(at: range.location) { range.location += 1 }
-            let replacement = (insertString as? NSAttributedString)?.string ?? (insertString as? String ?? "")
-            if range.length > 0, isTaskMarker(at: NSMaxRange(range)),
-               !replacement.hasSuffix("\n"), !hasNewline(before: range.location) {
-                range.length += 1
-            }
         }
         let value: Any
         if let string = insertString as? String {
@@ -167,60 +122,6 @@ final class NoteTextView: NSTextView {
         } else { value = insertString }
         super.insertText(value, replacementRange: range)
         typingAttributes = EditorProjection.attributes()
-    }
-
-    private func isTaskMarker(at offset: Int) -> Bool {
-        guard let storage = textStorage, offset >= 0, offset < storage.length,
-              let attachment = storage.attribute(.attachment, at: offset, effectiveRange: nil) as? PaperAttachment,
-              case .task = attachment.value else { return false }
-        return true
-    }
-
-    private func hasNewline(before offset: Int) -> Bool {
-        guard offset > 0, offset <= (string as NSString).length else { return false }
-        return (string as NSString).substring(with: NSRange(location: offset - 1, length: 1)) == "\n"
-    }
-
-    override func deleteBackward(_ sender: Any?) {
-        let range = selectedRange()
-        if kind == .checklist, range.length > 0 {
-            insertText("", replacementRange: range)
-        } else if kind == .checklist, isTaskMarker(at: range.location - 1), hasNewline(before: range.location - 1) {
-            insertText("", replacementRange: NSRange(location: range.location - 2, length: 2))
-        } else if kind == .checklist, isTaskMarker(at: range.location), hasNewline(before: range.location) {
-            insertText("", replacementRange: NSRange(location: range.location - 1, length: 2))
-        } else { super.deleteBackward(sender) }
-    }
-
-    override func deleteForward(_ sender: Any?) {
-        let range = selectedRange()
-        if kind == .checklist, range.length > 0 {
-            insertText("", replacementRange: range)
-        } else if kind == .checklist, isTaskMarker(at: range.location + 1), hasNewline(before: range.location + 1) {
-            insertText("", replacementRange: NSRange(location: range.location, length: 2))
-        } else { super.deleteForward(sender) }
-    }
-
-    func toggleTask(_ id: UUID) {
-        guard !importing, !hasMarkedText(), let storage = textStorage else { return }
-        var match: (NSRange, Bool)?
-        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
-            if let attachment = value as? PaperAttachment, case .task(let taskID, let checked) = attachment.value,
-               taskID == id { match = (range, checked); stop.pointee = true }
-        }
-        guard let (range, checked) = match else { return }
-        let selection = selectedRange()
-        let value = EditorProjection.task(TaskItem(id: id, isChecked: !checked))
-        // Checking is a semantic transaction, not typing an attachment. Native typing
-        // coalescing can swallow an attachment replacement after rich/paragraph edits.
-        breakUndoCoalescing()
-        undoManager?.registerUndo(withTarget: self) { editor in editor.toggleTask(id) }
-        undoManager?.setActionName("勾选待办")
-        storage.replaceCharacters(in: range, with: value)
-        didChangeText()
-        setSelectedRange(selection)
-        typingAttributes = EditorProjection.attributes()
-        window?.makeFirstResponder(self)
     }
 
     override func cancelOperation(_ sender: Any?) {
