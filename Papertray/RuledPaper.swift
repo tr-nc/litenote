@@ -61,7 +61,7 @@ enum RuledPaper {
             }
         }
 
-        NSColor(srgbRed: 0.47, green: 0.58, blue: 0.70, alpha: 0.18).setStroke()
+        PaperPalette.rule.setStroke()
         path.lineWidth = 0.5
         path.stroke()
     }

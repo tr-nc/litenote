@@ -2,9 +2,6 @@ import AppKit
 
 final class NoteTextView: NSTextView {
     var kind: PaperKind = .ruled
-    var ink: Ink = .graphite {
-        didSet { typingAttributes = EditorProjection.attributes(ink: ink) }
-    }
     var attachments: AttachmentStore!
     var clipboard: NSPasteboard = .general
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
@@ -90,7 +87,7 @@ final class NoteTextView: NSTextView {
                 } catch { self.reportError(error) }
             }
         } else if let string = pasteboard.string(forType: .string) {
-            insertText(NSAttributedString(string: string, attributes: EditorProjection.attributes(ink: ink)),
+            insertText(NSAttributedString(string: string, attributes: EditorProjection.attributes()),
                        replacementRange: selectedRange())
         } else {
             reportError(PapertrayError.message("请粘贴文字或静态位图；文件和其他富文本格式暂不支持。"))
@@ -108,14 +105,14 @@ final class NoteTextView: NSTextView {
 
     override func insertNewline(_ sender: Any?) {
         guard kind == .checklist, !hasMarkedText() else { super.insertNewline(sender); return }
-        let value = NSMutableAttributedString(string: "\n", attributes: EditorProjection.attributes(ink: ink))
+        let value = NSMutableAttributedString(string: "\n", attributes: EditorProjection.attributes())
         value.append(EditorProjection.task(TaskItem()))
         insertText(value, replacementRange: selectedRange())
-        typingAttributes = EditorProjection.attributes(ink: ink)
+        typingAttributes = EditorProjection.attributes()
     }
 
     override func insertLineBreak(_ sender: Any?) {
-        insertText(NSAttributedString(string: "\n", attributes: EditorProjection.attributes(ink: ink)),
+        insertText(NSAttributedString(string: "\n", attributes: EditorProjection.attributes()),
                    replacementRange: selectedRange())
     }
 
@@ -161,10 +158,15 @@ final class NoteTextView: NSTextView {
         }
         let value: Any
         if let string = insertString as? String {
-            value = NSAttributedString(string: string, attributes: EditorProjection.attributes(ink: ink))
+            value = NSAttributedString(string: string, attributes: EditorProjection.attributes())
+        } else if let attributed = insertString as? NSAttributedString {
+            let normalized = NSMutableAttributedString(attributedString: attributed)
+            normalized.addAttributes([.foregroundColor: PaperPalette.ink, .papertrayInk: Ink.graphite.rawValue],
+                                     range: NSRange(location: 0, length: normalized.length))
+            value = normalized
         } else { value = insertString }
         super.insertText(value, replacementRange: range)
-        typingAttributes = EditorProjection.attributes(ink: ink)
+        typingAttributes = EditorProjection.attributes()
     }
 
     private func isTaskMarker(at offset: Int) -> Bool {
@@ -217,23 +219,12 @@ final class NoteTextView: NSTextView {
         storage.replaceCharacters(in: range, with: value)
         didChangeText()
         setSelectedRange(selection)
-        typingAttributes = EditorProjection.attributes(ink: ink)
+        typingAttributes = EditorProjection.attributes()
         window?.makeFirstResponder(self)
     }
 
     override func cancelOperation(_ sender: Any?) {
         if hasMarkedText() { super.cancelOperation(sender) }
         else { onHideRequested() }
-    }
-}
-
-final class PaperSurface: NSView {
-    let kind: PaperKind
-    init(kind: PaperKind) { self.kind = kind; super.init(frame: .zero) }
-    required init?(coder: NSCoder) { return nil }
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 0.99, green: 0.97, blue: 0.90, alpha: 1).setFill()
-        dirtyRect.fill()
-
     }
 }

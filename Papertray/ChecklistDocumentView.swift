@@ -145,7 +145,7 @@ private final class ChecklistChrome: NSView {
     override func draw(_ dirtyRect: NSRect) {
         for region in regions where region.frame.intersects(dirtyRect) {
             let border = NSBezierPath(roundedRect: region.frame, xRadius: 6, yRadius: 6)
-            NSColor(srgbRed: 0.56, green: 0.52, blue: 0.40, alpha: 0.22).setStroke()
+            PaperPalette.border.setStroke()
             border.lineWidth = 0.75
             border.stroke()
             let rules = NSBezierPath()
@@ -153,7 +153,7 @@ private final class ChecklistChrome: NSView {
                 rules.move(to: NSPoint(x: ChecklistDocumentView.textInset + 5, y: baseline + 3))
                 rules.line(to: NSPoint(x: region.frame.maxX - 12, y: baseline + 3))
             }
-            NSColor(srgbRed: 0.47, green: 0.58, blue: 0.70, alpha: 0.25).setStroke()
+            PaperPalette.rule.setStroke()
             rules.lineWidth = 0.5
             rules.stroke()
         }
@@ -178,8 +178,7 @@ private final class TaskCheckbox: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: 2, dy: 2)
         let shape = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
-        let color = state == .on ? NSColor.controlAccentColor
-            : NSColor(srgbRed: 0.42, green: 0.40, blue: 0.34, alpha: 1)
+        let color = NSColor.white.withAlphaComponent(state == .on ? 1 : 0.75)
         color.withAlphaComponent(isHighlighted ? 0.20 : 0.06).setFill()
         shape.fill()
         color.setStroke()

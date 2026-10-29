@@ -5,17 +5,10 @@ enum PaperKind: String, Codable, CaseIterable {
     var title: String { self == .ruled ? "横线纸" : "待办纸" }
 }
 
+/// Legacy document metadata retained for lossless loading/saving. All ink renders white;
+/// new input uses graphite as the schema-v1 default, not as a display color.
 enum Ink: String, Codable, CaseIterable {
     case graphite, blue, red, green, purple
-    var title: String {
-        switch self {
-        case .graphite: return "石墨"
-        case .blue: return "蓝"
-        case .red: return "红"
-        case .green: return "绿"
-        case .purple: return "紫"
-        }
-    }
 }
 
 enum Run: Codable, Equatable {

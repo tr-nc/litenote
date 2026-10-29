@@ -43,7 +43,7 @@ extension EditorAndStorageTests {
                 XCTAssertEqual(controller.noteDocument.content, original)
                 XCTAssertEqual(store.loadAll().notes.first { $0.id == controller.noteDocument.id }?.content, original)
                 let candidate: Any = attributedCommit
-                    ? NSAttributedString(string: "你好", attributes: EditorProjection.attributes(ink: .blue))
+                    ? NSAttributedString(string: "你好", attributes: EditorProjection.attributes(ink: .graphite))
                     : "你好"
                 view.insertText(candidate, replacementRange: NSRange(location: NSNotFound, length: 0))
                 XCTAssertEqual(view.string, prefix + "前👩🏽‍💻你好后")
@@ -98,10 +98,10 @@ extension EditorAndStorageTests {
         let content = controller.noteDocument.content
         switch content {
         case .ruled(let runs):
-            XCTAssertEqual(runs, [.text(text, .blue)], file: file, line: line)
+            XCTAssertEqual(runs, [.text(text, .graphite)], file: file, line: line)
         case .checklist(let items):
             XCTAssertEqual(items.count, 1, file: file, line: line)
-            XCTAssertEqual(items.first?.body, [.text(text, .blue)], file: file, line: line)
+            XCTAssertEqual(items.first?.body, [.text(text, .graphite)], file: file, line: line)
         }
         XCTAssertEqual(store.loadAll().notes.first { $0.id == controller.noteDocument.id }?.content,
                        content, file: file, line: line)

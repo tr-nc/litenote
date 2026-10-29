@@ -6,7 +6,7 @@ extension EditorAndStorageTests {
     private func withWorkspace(_ body: (PaperWorkspace, ToolTrayController, UserDefaults) throws -> Void) rethrows {
         let name = "local.papertray.workspace-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
-        let tray = ToolTrayController(ink: .blue)
+        let tray = ToolTrayController(glass: glass)
         let workspace = PaperWorkspace(tray: tray, preferences: preferences)
         defer {
             tray.hide()
@@ -52,7 +52,7 @@ extension EditorAndStorageTests {
     private func withFocusedWorkspace(_ body: (PaperWorkspace, ToolTrayController) async throws -> Void) async rethrows {
         let name = "local.papertray.focus-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
-        let tray = ToolTrayController(ink: .blue)
+        let tray = ToolTrayController(glass: glass)
         let workspace = PaperWorkspace(tray: tray, preferences: preferences)
         defer {
             tray.hide()
@@ -219,7 +219,7 @@ extension EditorAndStorageTests {
         }
     }
 
-    func testDragCreationAndInkSelectionKeepTheWorkspaceTogether() throws {
+    func testDragCreationKeepsTheWorkspaceTogether() throws {
         try withWorkspace { workspace, tray, _ in
             workspace.show(activate: false)
             let screen = try XCTUnwrap(NSScreen.screens.first)
@@ -239,13 +239,6 @@ extension EditorAndStorageTests {
             tray.release(at: drop)
             XCTAssertTrue(created)
             XCTAssertTrue(workspace.isVisible)
-            XCTAssertTrue(tray.window!.isVisible)
-            XCTAssertTrue(workspace.notes.values.allSatisfy { $0.window!.isVisible })
-            var selectedInk: Ink?
-            tray.onInk = { selectedInk = $0 }
-            let button = try XCTUnwrap(tray.window?.contentView?.subviews.compactMap { $0 as? NSButton }.last)
-            button.performClick(nil)
-            XCTAssertEqual(selectedInk, .purple)
             XCTAssertTrue(tray.window!.isVisible)
             XCTAssertTrue(workspace.notes.values.allSatisfy { $0.window!.isVisible })
         }
@@ -306,7 +299,7 @@ extension EditorAndStorageTests {
             XCTAssertTrue(note.window!.isVisible)
             XCTAssertTrue(tray.window!.isVisible)
             try workspace.hide()
-            let nextTray = ToolTrayController(ink: .blue)
+            let nextTray = ToolTrayController(glass: glass)
             defer { nextTray.hide() }
             let restored = PaperWorkspace(tray: nextTray, preferences: preferences)
             restored.add(note)
@@ -323,7 +316,7 @@ extension EditorAndStorageTests {
     func testImmediateDeletionRemovesPaperFromWorkspaceAndItNeverTogglesBack() throws {
         let name = "local.papertray.workspace-delete-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
-        let tray = ToolTrayController(ink: .blue)
+        let tray = ToolTrayController(glass: glass)
         let workspace = PaperWorkspace(tray: tray, preferences: preferences)
         defer { tray.hide(); preferences.removePersistentDomain(forName: name) }
         let removed = try editor(kind: .ruled)

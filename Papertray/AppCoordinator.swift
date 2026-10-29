@@ -26,7 +26,6 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var tray: ToolTrayController!
     private var workspace: PaperWorkspace!
     private var settings: NSWindowController?
-    private var ink: Ink = Ink(rawValue: UserDefaults.standard.string(forKey: "ink") ?? "") ?? .graphite
     private var screenObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -48,18 +47,9 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let menu = NSMenu()
             menu.delegate = self
             statusItem.menu = menu
-            tray = ToolTrayController(ink: ink)
+            tray = ToolTrayController()
             workspace = PaperWorkspace(tray: tray, preferences: .standard)
             tray.onCreate = { [weak self] in self?.create(kind: $0, point: $1, anchor: $2) ?? false }
-            tray.onInk = { [weak self] ink in
-                guard let self else { return }
-                self.ink = ink
-                UserDefaults.standard.set(ink.rawValue, forKey: "ink")
-                if let note = self.workspace.lastFocusedNote {
-                    note.editor.ink = ink
-                    note.open()
-                }
-            }
             let loaded = store.loadAll()
             for document in loaded.notes {
                 do {
@@ -94,7 +84,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func makeController(_ document: NoteDocument, frame: NSRect) throws -> NoteController {
-        let controller = try NoteController(document: document, store: store, attachments: attachments, frame: frame, ink: ink)
+        let controller = try NoteController(document: document, store: store, attachments: attachments, frame: frame)
         controller.onFrame = { controller in
             if let frame = controller.window?.frame {
                 UserDefaults.standard.set(NSStringFromRect(frame), forKey: "frame.\(controller.noteDocument.id)")
@@ -189,11 +179,12 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc private func showSettings() {
         if settings == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 170),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 430),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.animationBehavior = .none
             window.title = "Papertray 设置"
             window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = NSHostingView(rootView: SettingsView())
             window.center()
             settings = NSWindowController(window: window)
@@ -236,8 +227,10 @@ private struct SettingsView: View {
                     if SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
                 } catch { NSApp.presentError(error) }
             }))
+            Divider().padding(.vertical, 8)
+            GlassSettingsView(preferences: .shared)
         }
         .padding(24)
-        .frame(width: 380, height: 150)
+        .frame(width: 420, height: 430)
     }
 }

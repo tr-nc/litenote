@@ -1,18 +1,6 @@
 import AppKit
 import ImageIO
 
-extension Ink {
-    var color: NSColor {
-        switch self {
-        case .graphite: return NSColor(srgbRed: 0.17, green: 0.16, blue: 0.14, alpha: 1)
-        case .blue: return NSColor(srgbRed: 0.15, green: 0.34, blue: 0.65, alpha: 1)
-        case .red: return NSColor(srgbRed: 0.72, green: 0.23, blue: 0.22, alpha: 1)
-        case .green: return NSColor(srgbRed: 0.19, green: 0.43, blue: 0.30, alpha: 1)
-        case .purple: return NSColor(srgbRed: 0.48, green: 0.27, blue: 0.60, alpha: 1)
-        }
-    }
-}
-
 extension NSAttributedString.Key {
     static let papertrayInk = Self("local.papertray.ink")
 }
@@ -53,10 +41,10 @@ final class PaperAttachment: NSTextAttachment {
 }
 
 enum EditorProjection {
-    static func attributes(ink: Ink) -> [NSAttributedString.Key: Any] {
+    static func attributes(ink: Ink = .graphite) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 7
-        return [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: ink.color,
+        return [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: PaperPalette.ink,
                 .papertrayInk: ink.rawValue, .paragraphStyle: paragraph]
     }
 

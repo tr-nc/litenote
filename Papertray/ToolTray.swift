@@ -3,10 +3,9 @@ import AppKit
 @MainActor
 final class ToolTrayController: NSWindowController {
     var onCreate: ((PaperKind, NSPoint, NSPoint) -> Bool)?
-    var onInk: ((Ink) -> Void)?
     var onDismiss: (() -> Void)?
     private var papers: [PaperChoice] = []
-    private var colors: [NSButton] = []
+    private let glass: GlassPreferences
     private var preview: NSPanel?
     private var keyMonitor: Any?
     private var screenObserver: NSObjectProtocol?
@@ -15,8 +14,9 @@ final class ToolTrayController: NSWindowController {
     private var draggedKind: PaperKind = .ruled
     private var anchor = NSPoint.zero
 
-    init(ink: Ink) {
-        let panel = NotePanel(contentRect: NSRect(x: 0, y: 0, width: 250, height: 182),
+    init(glass: GlassPreferences? = nil) {
+        self.glass = glass ?? .shared
+        let panel = NotePanel(contentRect: NSRect(x: 0, y: 0, width: 250, height: 132),
                               styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Papertray"
         panel.level = .floating
@@ -24,26 +24,17 @@ final class ToolTrayController: NSWindowController {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         super.init(window: panel)
-        guard let content = panel.contentView else { return }
+        GlassSurface.configure(panel)
+        let content = GlassSurface(preferences: glass)
+        panel.contentView = content
         for (index, kind) in PaperKind.allCases.enumerated() {
-            let paper = PaperChoice(frame: NSRect(x: 20 + index * 116, y: 65, width: 94, height: 100))
+            let paper = PaperChoice(frame: NSRect(x: 20 + index * 116, y: 16, width: 94, height: 100))
             paper.kind = kind
             paper.tray = self
             paper.selected = index == 0
             papers.append(paper)
             content.addSubview(paper)
         }
-        for (index, color) in Ink.allCases.enumerated() {
-            let button = NSButton(title: "●", target: self, action: #selector(selectInk(_:)))
-            button.tag = index
-            button.frame = NSRect(x: 19 + index * 44, y: 14, width: 36, height: 32)
-            button.bezelStyle = .regularSquare
-            button.font = .systemFont(ofSize: 22)
-            button.setAccessibilityLabel("\(color.title)色笔")
-            colors.append(button)
-            content.addSubview(button)
-        }
-        updateInk(ink)
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -126,7 +117,8 @@ final class ToolTrayController: NSWindowController {
             panel.ignoresMouseEvents = true
             panel.level = .floating
             panel.alphaValue = 0.55
-            panel.backgroundColor = NSColor(srgbRed: 0.99, green: 0.97, blue: 0.90, alpha: 1)
+            GlassSurface.configure(panel)
+            panel.contentView = GlassSurface(preferences: glass)
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             preview = panel
@@ -141,26 +133,6 @@ final class ToolTrayController: NSWindowController {
         guard let window, gesture.release(at: point, screens: NSScreen.screens.map(\.frame), tray: window.frame) else { return }
         _ = onCreate?(draggedKind, point, anchor)
     }
-
-    @objc private func selectInk(_ sender: NSButton) {
-        let ink = Ink.allCases[sender.tag]
-        updateInk(ink)
-        onInk?(ink)
-    }
-
-    private func updateInk(_ ink: Ink) {
-        for (index, button) in colors.enumerated() {
-            let color = Ink.allCases[index]
-            let selected = color == ink
-            // These swatches are text glyphs; contentTintColor does not color
-            // regular-square button titles. Set the text color on every update.
-            button.attributedTitle = NSAttributedString(string: selected ? "◉" : "●", attributes: [
-                .foregroundColor: color.color,
-                .font: NSFont.systemFont(ofSize: 22)
-            ])
-            button.setAccessibilityValue(selected ? "已选择" : "未选择")
-        }
-    }
 }
 
 final class PaperChoice: NSView {
@@ -171,25 +143,25 @@ final class PaperChoice: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let paper = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 5, yRadius: 5)
-        NSColor(srgbRed: 0.99, green: 0.97, blue: 0.90, alpha: 1).setFill()
+        NSColor.white.withAlphaComponent(selected ? 0.10 : 0.04).setFill()
         paper.fill()
-        (selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
+        NSColor.white.withAlphaComponent(selected ? 0.65 : 0.22).setStroke()
         paper.lineWidth = selected ? 2 : 1
         paper.stroke()
         for index in 0..<3 {
             let y = CGFloat(42 + index * 17)
             if kind == .checklist {
-                NSColor.gray.setStroke()
+                NSColor.white.withAlphaComponent(0.6).setStroke()
                 NSBezierPath(rect: NSRect(x: 13, y: y, width: 8, height: 8)).stroke()
             }
             let line = NSBezierPath()
             line.move(to: NSPoint(x: kind == .checklist ? 28 : 13, y: y + 3))
             line.line(to: NSPoint(x: 80, y: y + 3))
-            NSColor.gray.withAlphaComponent(0.4).setStroke()
+            NSColor.white.withAlphaComponent(0.3).setStroke()
             line.stroke()
         }
         (kind.title as NSString).draw(at: NSPoint(x: 24, y: 14),
-                                      withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.darkGray])
+                                      withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: PaperPalette.ink])
     }
 
     override func mouseDown(with event: NSEvent) {

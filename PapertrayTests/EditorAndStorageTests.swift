@@ -9,8 +9,16 @@ final class EditorAndStorageTests: XCTestCase {
     var store: NoteStore!
     var clipboard: NSPasteboard!
     var controllers: [NoteController] = []
+    var glass: GlassPreferences!
+    private var preferencesSuite: String!
 
     override func setUpWithError() throws {
+        preferencesSuite = "local.papertray.glass-tests.\(UUID())"
+        glass = GlassPreferences(defaults: UserDefaults(suiteName: preferencesSuite)!)
+        var style = GlassStyle()
+        style.grainStrength = 0 // Pixel alignment tests isolate rules from decorative noise.
+        style.tintStrength = 0.85
+        glass.update(style)
         root = FileManager.default.temporaryDirectory.appendingPathComponent("Papertray 测试 \(UUID())")
         attachments = try AttachmentStore(root: root)
         store = try NoteStore(root: root, attachments: attachments)
@@ -20,13 +28,15 @@ final class EditorAndStorageTests: XCTestCase {
     override func tearDownWithError() throws {
         for controller in controllers { controller.window?.close() }
         controllers = []
+        glass = nil
+        UserDefaults().removePersistentDomain(forName: preferencesSuite)
         clipboard.releaseGlobally()
         try FileManager.default.removeItem(at: root)
     }
 
     func editor(kind: PaperKind = .checklist) throws -> NoteController {
         let controller = try NoteController(document: NoteDocument(kind: kind), store: store, attachments: attachments,
-                                            frame: NSRect(x: 0, y: 0, width: 360, height: 440), ink: .blue)
+                                            frame: NSRect(x: 0, y: 0, width: 360, height: 440), glass: glass)
         controller.editor.clipboard = clipboard
         controller.window?.makeFirstResponder(controller.editor)
         controllers.append(controller)
@@ -67,7 +77,7 @@ final class EditorAndStorageTests: XCTestCase {
         view.insertText("第二项", replacementRange: view.selectedRange())
         let result = try tasks(controller)
         XCTAssertEqual(result.count, 2)
-        XCTAssertEqual(result[1].body, [.text("第二项", .blue)])
+        XCTAssertEqual(result[1].body, [.text("第二项", .graphite)])
         XCTAssertTrue(view.string.contains("仍在同一项"))
         XCTAssertNotNil(view.textLayoutManager)
         try controller.flush()
@@ -80,7 +90,7 @@ final class EditorAndStorageTests: XCTestCase {
         view.insertText("前后", replacementRange: view.selectedRange())
         view.setSelectedRange(NSRange(location: 2, length: 0))
         view.insertNewline(nil)
-        XCTAssertEqual(try tasks(controller).map(\.body), [[.text("前", .blue)], [.text("后", .blue)]])
+        XCTAssertEqual(try tasks(controller).map(\.body), [[.text("前", .graphite)], [.text("后", .graphite)]])
         view.deleteBackward(nil) // Deletes the second checkbox, merging the task bodies.
         XCTAssertEqual(try tasks(controller).count, 1)
         XCTAssertNotNil(view.textLayoutManager)
@@ -95,11 +105,11 @@ final class EditorAndStorageTests: XCTestCase {
         view.undoManager?.removeAllActions()
         view.toggleTask(id)
         XCTAssertTrue(try XCTUnwrap(tasks(controller).first).isChecked)
-        XCTAssertEqual(try tasks(controller).first?.body, [.text("保留原色", .blue)])
+        XCTAssertEqual(try tasks(controller).first?.body, [.text("保留原色", .graphite)])
         XCTAssertTrue(try XCTUnwrap(view.undoManager).canUndo)
         view.undoManager?.undo()
         XCTAssertEqual(EditorProjection.parse(view.attributedString(), kind: .checklist, firstTaskID: id),
-                       .checklist([TaskItem(id: id, body: [.text("保留原色", .blue)])]))
+                       .checklist([TaskItem(id: id, body: [.text("保留原色", .graphite)])]))
         XCTAssertFalse(try XCTUnwrap(tasks(controller).first).isChecked)
         view.undoManager?.redo()
         XCTAssertTrue(try XCTUnwrap(tasks(controller).first).isChecked)
@@ -123,16 +133,25 @@ final class EditorAndStorageTests: XCTestCase {
         XCTAssertEqual(try tasks(controller).count, 2)
     }
 
-    func testSelectingInkChangesFutureInputNotSelection() throws {
-        let controller = try editor(kind: .ruled)
+    func testLegacyColoredTextRendersWhiteWithoutRewritingItsMetadata() throws {
+        var document = NoteDocument(kind: .ruled)
+        document.content = .ruled(Ink.allCases.map { .text("\($0.rawValue) ", $0) })
+        try store.save(document)
+        let controller = try NoteController(document: document, store: store, attachments: attachments,
+                                            frame: NSRect(x: 0, y: 0, width: 360, height: 440), glass: glass)
+        controllers.append(controller)
         let view = controller.editor
-        view.insertText("旧", replacementRange: view.selectedRange())
-        view.selectAll(nil)
-        view.ink = .red
-        XCTAssertEqual(controller.noteDocument.content, .ruled([.text("旧", .blue)]))
-        view.setSelectedRange(NSRange(location: view.string.utf16.count, length: 0))
-        view.insertText("新", replacementRange: view.selectedRange())
-        XCTAssertEqual(controller.noteDocument.content, .ruled([.text("旧", .blue), .text("新", .red)]))
+        view.textStorage?.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: view.string.utf16.count)) { color, _, _ in
+            XCTAssertEqual(color as? NSColor, .white)
+        }
+        XCTAssertEqual(controller.noteDocument, document)
+        try controller.flush()
+        XCTAssertEqual(store.loadAll().notes.first?.content, document.content)
+        view.insertText("新", replacementRange: NSRange(location: view.string.utf16.count, length: 0))
+        XCTAssertEqual(view.textStorage?.attribute(.foregroundColor, at: view.string.utf16.count - 1, effectiveRange: nil) as? NSColor, .white)
+        XCTAssertEqual(view.insertionPointColor, .white)
+        view.undoManager?.undo()
+        XCTAssertEqual(controller.noteDocument.content, document.content)
     }
 
     func testPasteMultilineTextKeepsOneTaskAndNormalizesFormatting() throws {
@@ -140,7 +159,7 @@ final class EditorAndStorageTests: XCTestCase {
         clipboard.setString("一\n二\n三 👩🏽‍💻", forType: .string)
         controller.editor.paste(nil)
         XCTAssertEqual(try tasks(controller).count, 1)
-        XCTAssertEqual(try tasks(controller).first?.body, [.text("一\n二\n三 👩🏽‍💻", .blue)])
+        XCTAssertEqual(try tasks(controller).first?.body, [.text("一\n二\n三 👩🏽‍💻", .graphite)])
     }
 
     func testImagePasteCommitsFileBeforeDocumentAndCopiesOnlyPlainText() async throws {
@@ -273,7 +292,7 @@ final class EditorAndStorageTests: XCTestCase {
         let expected = NSRect(x: 0, y: 0, width: 360, height: 440)
         XCTAssertEqual(first.window?.frame, expected)
         let restored = try NoteController(document: first.noteDocument, store: store, attachments: attachments,
-                                          frame: expected, ink: .blue)
+                                          frame: expected, glass: glass)
         controllers.append(restored)
         XCTAssertEqual(restored.window?.frame, expected)
     }
@@ -346,6 +365,6 @@ final class EditorAndStorageTests: XCTestCase {
         try FileManager.default.removeItem(at: directory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try controller.flush()
-        XCTAssertEqual(store.loadAll().notes.first?.content, .ruled([.text("不能丢", .blue)]))
+        XCTAssertEqual(store.loadAll().notes.first?.content, .ruled([.text("不能丢", .graphite)]))
     }
 }

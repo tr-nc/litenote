@@ -61,7 +61,7 @@ extension EditorAndStorageTests {
         XCTAssertGreaterThan(paper.regions[1].frame.minY - before[1].frame.minY, 400)
         XCTAssertTrue(checkboxButtons(in: paper).contains { $0 === firstButton })
         XCTAssertEqual(firstButton.frame, firstButtonFrame)
-        XCTAssertEqual(try tasks(controller)[1].body, [.text("第二项", .blue)])
+        XCTAssertEqual(try tasks(controller)[1].body, [.text("第二项", .graphite)])
         // Scrolling away/back and resizing must not recreate a task's checkbox.
         let scroll = try XCTUnwrap(view.enclosingScrollView)
         scroll.contentView.scroll(to: NSPoint(x: 0, y: 600))
@@ -103,7 +103,7 @@ extension EditorAndStorageTests {
             XCTAssertEqual(try tasks(controller).count, 1)
             let paper = try XCTUnwrap(view.enclosingScrollView?.documentView as? ChecklistDocumentView)
             XCTAssertEqual(paper.regions.count, 1)
-            XCTAssertEqual(try tasks(controller)[0].body, [.text("前后", .blue)])
+            XCTAssertEqual(try tasks(controller)[0].body, [.text("前后", .graphite)])
         }
     }
 
@@ -160,14 +160,14 @@ extension EditorAndStorageTests {
         for button in checkboxButtons(in: surface) {
             let rect = button.convert(button.bounds, to: surface)
             let top = surface.isFlipped ? rect.minY : surface.bounds.height - rect.maxY
-            var darkPixels = 0
+            var brightPixels = 0
             for y in Int(top * scale)..<min(bitmap.pixelsHigh, Int((top + rect.height) * scale)) {
                 for x in Int(rect.minX * scale)..<min(bitmap.pixelsWide, Int(rect.maxX * scale)) {
                     if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                       color.redComponent < 0.75 { darkPixels += 1 }
+                       color.redComponent > 0.6 { brightPixels += 1 }
                 }
             }
-            XCTAssertGreaterThan(darkPixels, 20, "Checkbox exists but is not painted")
+            XCTAssertGreaterThan(brightPixels, 20, "Checkbox exists but is not painted")
         }
         let image = NSImage(size: surface.bounds.size)
         image.addRepresentation(bitmap)

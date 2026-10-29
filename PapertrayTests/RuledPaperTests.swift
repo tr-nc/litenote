@@ -70,8 +70,9 @@ extension EditorAndStorageTests {
         controller.window?.display()
         let rect = view.visibleRect
         let surface = try XCTUnwrap(controller.window?.contentView)
-        let bitmap = try XCTUnwrap(surface.bitmapImageRepForCachingDisplay(in: surface.bounds))
-        surface.cacheDisplay(in: surface.bounds, to: bitmap)
+        let paperRect = scroll.convert(scroll.bounds, to: surface)
+        let bitmap = try XCTUnwrap(surface.bitmapImageRepForCachingDisplay(in: paperRect))
+        surface.cacheDisplay(in: paperRect, to: bitmap)
         let sampleX = Int(6 * CGFloat(bitmap.pixelsWide) / rect.width)
         let scale = CGFloat(bitmap.pixelsHigh) / rect.height
         let background = try XCTUnwrap(bitmap.colorAt(x: sampleX, y: 0)?.usingColorSpace(.deviceRGB))
@@ -79,7 +80,7 @@ extension EditorAndStorageTests {
         var previousPixel = -2
         for row in 0..<bitmap.pixelsHigh {
             let color = try XCTUnwrap(bitmap.colorAt(x: sampleX, y: row)?.usingColorSpace(.deviceRGB))
-            if color.redComponent < background.redComponent - 0.015 {
+            if color.redComponent > background.redComponent + 0.015 {
                 if row > previousPixel + 1 { rules.append(rect.minY + (CGFloat(row) + 0.5) / scale) }
                 previousPixel = row
             }

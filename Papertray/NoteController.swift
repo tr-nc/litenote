@@ -27,12 +27,13 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     var onFrame: ((NoteController) -> Void)?
     var onDelete: ((NoteController) -> Void)?
 
-    init(document: NoteDocument, store: NoteStore, attachments: AttachmentStore, frame: NSRect, ink: Ink) throws {
+    init(document: NoteDocument, store: NoteStore, attachments: AttachmentStore, frame: NSRect, glass: GlassPreferences? = nil) throws {
         self.noteDocument = document
         self.store = store
         let panel = NotePanel(contentRect: frame, styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
                               backing: .buffered, defer: false)
         // Placement and workspace persistence use outer window frames, not content rects.
+        GlassSurface.configure(panel)
         panel.setFrame(frame, display: false)
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
@@ -45,7 +46,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         panel.delegate = self
         installDeleteButton(on: panel)
 
-        let surface = PaperSurface(kind: document.content.kind)
+        let surface = GlassSurface(preferences: glass)
         panel.contentView = surface
         let scroll = NSScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -56,7 +57,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: surface.topAnchor),
+            scroll.topAnchor.constraint(equalTo: (panel.contentLayoutGuide as! NSLayoutGuide).topAnchor),
             scroll.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
         ])
         editor.kind = document.content.kind
@@ -81,7 +82,8 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         scroll.documentView = editor.kind == .checklist ? ChecklistDocumentView(editor: editor) : editor
         let text = try EditorProjection.render(document.content, store: attachments)
         editor.textStorage?.setAttributedString(text)
-        editor.ink = ink
+        editor.typingAttributes = EditorProjection.attributes()
+        editor.insertionPointColor = PaperPalette.ink
         editor.delegate = self
         // TextKit restores attributed storage during undo without synchronously notifying
         // NSTextViewDelegate on every path. Commit at the undo transaction boundary too.
