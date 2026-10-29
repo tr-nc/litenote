@@ -15,6 +15,9 @@ extension EditorAndStorageTests {
             window.appearance = NSAppearance(named: systemAppearance)
             tray.show(activate: false)
             window.display()
+            XCTAssertEqual(window.titleVisibility, .hidden)
+            XCTAssertEqual(window.title, "Papertray", "Retain the window name for accessibility")
+            XCTAssertTrue(window.styleMask.contains(.titled), "Retain native titlebar dragging")
             XCTAssertEqual(content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua)
             for choice in choices {
                 XCTAssertTrue(content.hitTest(NSPoint(x: choice.frame.midX, y: choice.frame.midY)) === choice)

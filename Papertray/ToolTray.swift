@@ -19,6 +19,7 @@ final class ToolTrayController: NSWindowController {
         let panel = NotePanel(contentRect: NSRect(x: 0, y: 0, width: 250, height: 132),
                               styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Papertray"
+        panel.titleVisibility = .hidden
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
