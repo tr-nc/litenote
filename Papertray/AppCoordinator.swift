@@ -56,7 +56,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
             workspace = PaperWorkspace(note: controller, preferences: .standard)
-            KeyboardShortcuts.onKeyUp(for: .togglePaper) { [weak self] in self?.toggleWorkspace() }
+            KeyboardShortcuts.onKeyDown(for: .togglePaper) { [weak self] in self?.toggleWorkspace() }
             if KeyboardShortcuts.getShortcut(for: .togglePaper)?.isTakenBySystem == true {
                 KeyboardShortcuts.disable(.togglePaper)
                 NSApp.presentError(PapertrayError.message("横线纸快捷键与系统快捷键冲突，请在 Papertray 设置中重新录制。没有修改系统快捷键。"))
