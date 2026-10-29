@@ -43,7 +43,11 @@ final class PaperAttachment: NSTextAttachment {
 enum EditorProjection {
     static func attributes(ink: Ink = .graphite) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 7
+        // A minimum line box also applies to TextKit 2's trailing empty line.
+        // Additive lineSpacing is dropped by that layout path after deleting the
+        // last glyph, moving both the caret and paper rules upward. No maximum:
+        // tall attachments and fallback glyphs must still expand their own line.
+        paragraph.minimumLineHeight = 25
         return [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: PaperPalette.ink,
                 .papertrayInk: ink.rawValue, .paragraphStyle: paragraph]
     }

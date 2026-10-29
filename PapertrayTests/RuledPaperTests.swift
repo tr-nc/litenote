@@ -9,6 +9,68 @@ extension EditorAndStorageTests {
         try assertRuledAlignment(controller, screenshotName: "ruled-mixed-text")
     }
 
+    func testEmptyTrailingLineKeepsItsSpacingAfterReturnTypingAndDeletion() throws {
+        for text in ["测试", "Latin", "👩🏽‍💻"] {
+            let controller = try editor(kind: .ruled)
+            controller.open()
+            let view = controller.editor
+            view.insertText(text, replacementRange: view.selectedRange())
+            let before = try assertRuledAlignment(controller, screenshotName: "ruled-before-return", minimumBaselines: 1, forceLayout: false)
+            view.insertNewline(nil)
+            let emptyCaret = view.firstRect(forCharacterRange: view.selectedRange(), actualRange: nil)
+            for selectAndDelete in [false, true] {
+                let end = view.selectedRange().location
+                view.insertText("x", replacementRange: view.selectedRange())
+                if selectAndDelete {
+                    view.setSelectedRange(NSRange(location: end, length: 1))
+                    view.deleteForward(nil)
+                } else { view.deleteBackward(nil) }
+                let after = try assertRuledAlignment(controller, screenshotName: "ruled-after-deleting-last-glyph", minimumBaselines: 2, forceLayout: false)
+                XCTAssertEqual(view.string, text + "\n")
+                XCTAssertGreaterThanOrEqual(before.count, 4)
+                XCTAssertGreaterThanOrEqual(after.count, 4)
+                for (expected, actual) in zip(before.prefix(4), after.prefix(4)) {
+                    XCTAssertEqual(actual, expected, accuracy: 0.75,
+                                   "Emptying the last line must not squeeze it or shift the remaining paper")
+                }
+                let caret = view.firstRect(forCharacterRange: view.selectedRange(), actualRange: nil)
+                XCTAssertEqual(caret.minY, emptyCaret.minY, accuracy: 0.75, "Fix the caret layout, not just the rules")
+            }
+        }
+    }
+
+    func testTrailingEmptyLinesKeepTheirSpacingAfterReloadResizeAndUndo() throws {
+        let first = try editor(kind: .ruled)
+        first.editor.insertText("第一行\n\n", replacementRange: first.editor.selectedRange())
+        try first.flush()
+        let saved = try XCTUnwrap(store.loadAll().notes.first { $0.id == first.noteDocument.id })
+        let restored = try NoteController(document: saved, store: store, attachments: attachments,
+                                          frame: NSRect(x: 0, y: 0, width: 360, height: 440), glass: glass)
+        controllers.append(restored)
+        restored.open()
+        let view = restored.editor
+        for width in [310.0, 500.0] {
+            restored.window?.setContentSize(NSSize(width: width, height: 408))
+            let before = try assertRuledAlignment(restored, screenshotName: "ruled-reloaded-empty-lines", minimumBaselines: 3, forceLayout: false)
+            let spacing = before[1] - before[0]
+            XCTAssertEqual(before[2] - before[1], spacing, accuracy: 0.75)
+            view.breakUndoCoalescing()
+            view.undoManager?.removeAllActions()
+            view.insertText("继续", replacementRange: view.selectedRange())
+            view.breakUndoCoalescing()
+            view.undoManager?.undo()
+            let after = try assertRuledAlignment(restored, screenshotName: "ruled-empty-line-undo", minimumBaselines: 3, forceLayout: false)
+            XCTAssertEqual(view.string, "第一行\n\n")
+            for (expected, actual) in zip(before.prefix(4), after.prefix(4)) {
+                XCTAssertEqual(actual, expected, accuracy: 0.75)
+            }
+            view.undoManager?.redo()
+            XCTAssertEqual(view.string, "第一行\n\n继续")
+            view.undoManager?.undo()
+            XCTAssertEqual(restored.noteDocument.content, saved.content)
+        }
+    }
+
     func testRuledPaperEmptyAndTrailingLine() throws {
         let controller = try editor(kind: .ruled)
         try assertRuledAlignment(controller, screenshotName: "ruled-empty", minimumBaselines: 1)
@@ -56,14 +118,15 @@ extension EditorAndStorageTests {
 
     /// Compare the actually painted paper pixels against native glyph baselines, not a
     /// second copy of the paper's spacing calculation. Samples stay outside the text inset.
+    @discardableResult
     private func assertRuledAlignment(_ controller: NoteController, screenshotName: String,
-                                      minimumBaselines: Int = 2, scrollOrigin: NSPoint? = nil,
-                                      file: StaticString = #filePath, line: UInt = #line) throws {
+                                      minimumBaselines: Int = 2, forceLayout: Bool = true, scrollOrigin: NSPoint? = nil,
+                                      file: StaticString = #filePath, line: UInt = #line) throws -> [CGFloat] {
         let view = controller.editor
         controller.window?.orderFront(nil)
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         let manager = try XCTUnwrap(view.textLayoutManager)
-        manager.ensureLayout(for: manager.documentRange)
+        if forceLayout { manager.ensureLayout(for: manager.documentRange) }
         let scroll = try XCTUnwrap(view.enclosingScrollView)
         scroll.contentView.scroll(to: scrollOrigin ?? .zero)
         scroll.reflectScrolledClipView(scroll.contentView)
@@ -119,5 +182,6 @@ extension EditorAndStorageTests {
         attachment.name = screenshotName
         attachment.lifetime = .keepAlways
         add(attachment)
+        return rules
     }
 }
