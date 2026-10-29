@@ -41,6 +41,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.minSize = NSSize(width: 300, height: 220)
         panel.title = document.content.kind.title
+        panel.titleVisibility = .hidden
         panel.isMovableByWindowBackground = false
         super.init(window: panel)
         panel.delegate = self

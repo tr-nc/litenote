@@ -3,6 +3,18 @@ import XCTest
 @testable import Papertray
 
 extension EditorAndStorageTests {
+    func testBothPaperKindsHideTheirTitleButKeepNativeWindowControls() throws {
+        for kind in PaperKind.allCases {
+            let controller = try editor(kind: kind)
+            controller.showWindow(nil)
+            let window = try XCTUnwrap(controller.window)
+            XCTAssertEqual(window.titleVisibility, .hidden)
+            XCTAssertEqual(window.title, kind.title)
+            XCTAssertTrue(window.styleMask.contains(.titled))
+            XCTAssertFalse(try XCTUnwrap(window.standardWindowButton(.closeButton)).isHiddenOrHasHiddenAncestor)
+        }
+    }
+
     func testNativeCloseButtonDeletesImmediatelyWithoutConfirmation() throws {
         let controller = try editor(kind: .ruled)
         controller.editor.insertText("删除内容", replacementRange: controller.editor.selectedRange())
