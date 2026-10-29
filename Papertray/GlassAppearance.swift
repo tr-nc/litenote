@@ -135,13 +135,45 @@ final class GlassSurface: NSView {
 /// Static, seeded noise: no animation, timer, screen capture or per-frame random work.
 /// A cached tile is reused across windows and repainted only when AppKit invalidates it.
 final class GlassTexture: NSView {
-    var style = GlassStyle() {
-        didSet {
-            if oldValue.grainSize != style.grainSize { noisePattern = Self.pattern(size: style.grainSize) }
-            needsDisplay = true
+    var style = GlassStyle() { didSet { needsDisplay = true } }
+    // Persistent material coordinates, local to this paper. Resizing exposes more
+    // of the same material; moving the paper carries that coordinate system along.
+    private var materialOrigin = NSPoint.zero
+    private var lastWindowFrame: NSRect?
+    private var geometryObservers: [NSObjectProtocol] = []
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        geometryObservers.forEach(NotificationCenter.default.removeObserver)
+        geometryObservers.removeAll()
+        lastWindowFrame = window?.frame
+        guard let window else { return }
+        for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+            geometryObservers.append(NotificationCenter.default.addObserver(
+                forName: name, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateMaterialOrigin() }
+            })
         }
     }
-    private lazy var noisePattern = Self.pattern(size: style.grainSize)
+
+    deinit {
+        geometryObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    private func updateMaterialOrigin() {
+        guard let window else { return }
+        let frame = window.frame
+        defer { lastWindowFrame = frame }
+        guard let previous = lastWindowFrame else { return }
+        // During live resize AppKit can deliver movement and sizing separately.
+        // Outside it, an unchanged size means an ordinary whole-window move.
+        if window.inLiveResize || frame.size != previous.size {
+            materialOrigin.x += previous.minX - frame.minX
+            materialOrigin.y += previous.minY - frame.minY
+            if frame != previous { needsDisplay = true }
+        }
+    }
     var reduceTransparency = false { didSet { needsDisplay = true } }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -167,19 +199,30 @@ final class GlassTexture: NSView {
         return bitmap.cgImage!
     }()
 
-    private static func pattern(size: Double) -> NSColor {
-        NSColor(patternImage: NSImage(cgImage: noise, size: NSSize(width: 128 * size, height: 128 * size)))
-    }
-
     override func draw(_ dirtyRect: NSRect) {
+        // Also synchronize before painting: do not depend on notification/draw order.
+        updateMaterialOrigin()
         style.tintColor.withAlphaComponent(reduceTransparency ? 1 : style.tintStrength).setFill()
         dirtyRect.fill()
         guard !reduceTransparency, style.grainStrength > 0 else { return }
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
-        NSGraphicsContext.current?.imageInterpolation = .none
-        NSGraphicsContext.current?.cgContext.setAlpha(style.grainStrength)
-        noisePattern.setFill()
-        dirtyRect.fill()
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.clip(to: dirtyRect)
+        context.interpolationQuality = .none
+        context.setAlpha(style.grainStrength)
+        // Place tiles on a persistent view-space grid, not on the graphics
+        // context's pattern phase. Each partial redraw uses the same tile rects,
+        // even when grain size produces fractional-point tiles.
+        let side = 128 * style.grainSize
+        let columns = Int(floor((dirtyRect.minX - materialOrigin.x) / side))..<Int(ceil((dirtyRect.maxX - materialOrigin.x) / side))
+        let rows = Int(floor((dirtyRect.minY - materialOrigin.y) / side))..<Int(ceil((dirtyRect.maxY - materialOrigin.y) / side))
+        for row in rows {
+            for column in columns {
+                let tile = NSRect(x: materialOrigin.x + Double(column) * side,
+                                  y: materialOrigin.y + Double(row) * side, width: side, height: side)
+                context.draw(Self.noise, in: tile)
+            }
+        }
     }
 }
