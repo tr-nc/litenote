@@ -6,7 +6,6 @@ final class NoteTextView: NSTextView {
     var clipboard: NSPasteboard = .general
     var reportError: (Error) -> Void = { NSApp.presentError($0) }
     var beforeCopy: () throws -> Void = {}
-    var onHideRequested: () -> Void = {}
     private(set) var importing = false
 
     override func draw(_ dirtyRect: NSRect) {
@@ -186,7 +185,15 @@ final class NoteTextView: NSTextView {
     }
 
     override func cancelOperation(_ sender: Any?) {
-        if hasMarkedText() { super.cancelOperation(sender) }
-        else { onHideRequested() }
+        // keyDown/interpretKeyEvents already gives the input context first refusal.
+        // If composition remains active, leave it untouched. NSTextView has no
+        // superclass cancelOperation implementation to call here.
+        guard !hasMarkedText() else { return }
+        let selection = selectedRange()
+        if selection.length > 0 || selectedRanges.count > 1 {
+            setSelectedRange(NSRange(location: NSMaxRange(selection), length: 0))
+        }
+        // Escape belongs to editing, never window visibility. With no selection
+        // it is a no-op; only the close button and workspace toggle hide the paper.
     }
 }

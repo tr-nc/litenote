@@ -72,21 +72,78 @@ extension EditorAndStorageTests {
         XCTAssertEqual(note.editor.string, "前x后")
     }
 
-    func testEscapeAndCloseUseTheSameHideOperationWithoutDeletingThePaper() throws {
+    func testEscapeWithoutSelectionKeepsPaperVisibleAndCloseStillHidesIt() throws {
         try withWorkspace { workspace, preferences in
             let note = workspace.note
             note.editor.insertText("保留内容", replacementRange: note.editor.selectedRange())
             workspace.show(activate: false)
+            let document = note.noteDocument
             note.editor.cancelOperation(nil)
-            XCTAssertFalse(workspace.isVisible)
-            XCTAssertFalse(preferences.bool(forKey: "workspaceVisible"))
-            workspace.show(activate: false)
+            XCTAssertTrue(workspace.isVisible)
+            XCTAssertTrue(preferences.bool(forKey: "workspaceVisible"))
+            XCTAssertEqual(note.noteDocument, document)
             note.window?.performClose(nil)
             XCTAssertFalse(workspace.isVisible)
             XCTAssertFalse(preferences.bool(forKey: "workspaceVisible"))
             workspace.show(activate: false)
             XCTAssertEqual(note.editor.string, "保留内容")
             XCTAssertEqual(store.loadAll().notes.first?.id, note.noteDocument.id)
+        }
+    }
+
+    func testEscapeKeyClearsPartialBlockAndWholeDocumentSelectionsWithoutHiding() throws {
+        try withWorkspace { workspace, preferences in
+            let note = workspace.note
+            let view = note.editor
+            let window = try XCTUnwrap(note.window)
+            let text = "前段\n\n当前 👩🏽‍💻\n继续\n\n后段"
+            view.insertText(text, replacementRange: view.selectedRange())
+            workspace.show(activate: false)
+            XCTAssertTrue(window.makeFirstResponder(view))
+            let document = note.noteDocument
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                                      timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                      characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}",
+                                                      isARepeat: false, keyCode: 53))
+            for level in 0...2 {
+                view.setSelectedRange((text as NSString).range(of: "当前"))
+                for _ in 0..<level { view.selectAll(nil) }
+                let end = NSMaxRange(view.selectedRange())
+                for _ in 0..<2 {
+                    window.sendEvent(event)
+                    XCTAssertEqual(view.selectedRange(), NSRange(location: end, length: 0))
+                    XCTAssertTrue(workspace.isVisible)
+                    XCTAssertTrue(preferences.bool(forKey: "workspaceVisible"))
+                    XCTAssertTrue(window.firstResponder === view)
+                    XCTAssertEqual(note.noteDocument, document)
+                    XCTAssertEqual(view.string, text)
+                }
+            }
+            view.insertText("续写", replacementRange: view.selectedRange())
+            XCTAssertEqual(view.string, text + "续写", "Typing after Escape must not replace the old selection")
+        }
+    }
+
+    func testEscapeDuringMarkedTextDoesNotHideOrCommitTheComposition() throws {
+        try withWorkspace { workspace, preferences in
+            let note = workspace.note
+            let view = note.editor
+            view.insertText("正文", replacementRange: view.selectedRange())
+            let document = note.noteDocument
+            workspace.show(activate: false)
+            view.setMarkedText("ce'shi", selectedRange: NSRange(location: 2, length: 2),
+                               replacementRange: NSRange(location: NSNotFound, length: 0))
+            XCTAssertTrue(view.hasMarkedText())
+            let markedRange = view.markedRange()
+            let selection = view.selectedRange()
+            view.cancelOperation(nil)
+            XCTAssertTrue(view.hasMarkedText())
+            XCTAssertEqual(view.markedRange(), markedRange)
+            XCTAssertEqual(view.selectedRange(), selection)
+            XCTAssertEqual(view.string, "正文ce'shi")
+            XCTAssertTrue(workspace.isVisible)
+            XCTAssertTrue(preferences.bool(forKey: "workspaceVisible"))
+            XCTAssertEqual(note.noteDocument, document, "Escape must not persist unfinished pinyin via the hide path")
         }
     }
 

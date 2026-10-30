@@ -93,7 +93,6 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
                 MainActor.assumeIsolated { self?.commitEditor() }
             })
         }
-        editor.onHideRequested = { [weak self] in self?.requestHide() }
         editor.beforeCopy = { [weak self] in try self?.flush() }
         editor.setSelectedRange(NSRange(location: text.length, length: 0))
         editor.invalidatePaper()
