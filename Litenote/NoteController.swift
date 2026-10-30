@@ -26,7 +26,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
 
     init(document: NoteDocument, store: NoteStore, attachments: AttachmentStore, frame: NSRect, glass: GlassPreferences? = nil) throws {
         guard document.content.kind == .ruled else {
-            throw PapertrayError.message("旧版待办纸已保留在磁盘上，不再作为编辑窗口打开。")
+            throw LitenoteError.message("旧版待办纸已保留在磁盘上，不再作为编辑窗口打开。")
         }
         self.noteDocument = document
         self.store = store
@@ -118,7 +118,7 @@ final class NoteController: NSWindowController, NSTextViewDelegate, NSWindowDele
     }
 
     func prepareToHide() throws {
-        guard !editor.importing else { throw PapertrayError.message("图片正在导入，请完成后再关闭横线纸。") }
+        guard !editor.importing else { throw LitenoteError.message("图片正在导入，请完成后再关闭横线纸。") }
         if editor.hasMarkedText() {
             editor.unmarkText()
             commitEditor()

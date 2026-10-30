@@ -1,10 +1,10 @@
 import AppKit
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 extension EditorAndStorageTests {
     private func withWorkspace(_ body: (PaperWorkspace, UserDefaults) throws -> Void) throws {
-        let name = "local.papertray.workspace-tests.\(UUID())"
+        let name = "local.litenote.workspace-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
         let note = try editor()
         let workspace = PaperWorkspace(note: note, preferences: preferences)
@@ -44,7 +44,7 @@ extension EditorAndStorageTests {
     }
 
     func testShowRestoresTypingFocusAtTheExistingSelection() async throws {
-        let name = "local.papertray.single-focus-tests.\(UUID())"
+        let name = "local.litenote.single-focus-tests.\(UUID())"
         let preferences = UserDefaults(suiteName: name)!
         defer { preferences.removePersistentDomain(forName: name) }
         let note = try editor()
@@ -127,7 +127,7 @@ extension EditorAndStorageTests {
         let menu = NSMenu()
         coordinator.menuNeedsUpdate(menu)
         XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title),
-                       ["显示 / 收起横线纸", "设置…", "退出 Papertray"])
+                       ["显示 / 收起横线纸", "设置…", "退出 Litenote"])
         XCTAssertTrue(menu.items.allSatisfy { $0.representedObject == nil })
     }
 }

@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 extension EditorAndStorageTests {
     func testImageOnlyClipboardEnablesPasteAndCommandVImportsIt() async throws {
@@ -39,7 +39,7 @@ extension EditorAndStorageTests {
                        #selector(NSTextView.pasteAsRichText(_:))]
         for action in actions {
             let (menu, item) = pasteMenu(for: view, action: action)
-            for type in [NSPasteboard.PasteboardType.png, .tiff, .string, .fileURL, .init("local.papertray.unsupported")] {
+            for type in [NSPasteboard.PasteboardType.png, .tiff, .string, .fileURL, .init("local.litenote.unsupported")] {
                 clipboard.clearContents()
                 // Validation checks offered formats only; it must not decode or import.
                 if type == .fileURL { clipboard.setString(sourceURL.absoluteString, forType: type) }

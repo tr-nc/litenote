@@ -2,7 +2,7 @@ import AppKit
 import ImageIO
 
 extension NSAttributedString.Key {
-    static let papertrayInk = Self("local.papertray.ink")
+    static let litenoteInk = Self("local.papertray.ink")
 }
 
 final class PaperAttachment: NSTextAttachment {
@@ -32,7 +32,7 @@ enum EditorProjection {
         // line after deletion. No maximum: tall attachments still expand the line.
         paragraph.minimumLineHeight = 25
         return [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: PaperPalette.ink,
-                .papertrayInk: ink.rawValue, .paragraphStyle: paragraph]
+                .litenoteInk: ink.rawValue, .paragraphStyle: paragraph]
     }
 
     static func image(_ id: UUID, store: AttachmentStore) throws -> NSAttributedString {
@@ -41,7 +41,7 @@ enum EditorProjection {
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: 720
-              ] as CFDictionary) else { throw PapertrayError.message("无法读取附件图片。") }
+              ] as CFDictionary) else { throw LitenoteError.message("无法读取附件图片。") }
         let attachment = PaperAttachment(id: id)
         let size = NSSize(width: thumbnail.width, height: thumbnail.height)
         attachment.image = NSImage(cgImage: thumbnail, size: size)
@@ -52,7 +52,7 @@ enum EditorProjection {
 
     static func render(_ content: NoteContent, store: AttachmentStore) throws -> NSAttributedString {
         guard case .ruled(let runs) = content else {
-            throw PapertrayError.message("仅支持编辑固定横线纸；旧版待办文件未被修改。")
+            throw LitenoteError.message("仅支持编辑固定横线纸；旧版待办文件未被修改。")
         }
         let result = NSMutableAttributedString(string: "")
         for run in runs {
@@ -73,7 +73,7 @@ enum EditorProjection {
             } else {
                 let value = (text.string as NSString).substring(with: range)
                 guard !value.isEmpty else { return }
-                let ink = (attributes[.papertrayInk] as? String).flatMap(Ink.init(rawValue:)) ?? .graphite
+                let ink = (attributes[.litenoteInk] as? String).flatMap(Ink.init(rawValue:)) ?? .graphite
                 if let last = runs.last, case .text(let previous, let previousInk) = last, previousInk == ink {
                     runs[runs.count - 1] = .text(previous + value, ink)
                 } else { runs.append(.text(value, ink)) }
@@ -89,7 +89,7 @@ enum ClipboardExporter {
                      store: AttachmentStore) throws -> String {
         guard range.location >= 0, range.length >= 0,
               range.location <= source.length, range.length <= source.length - range.location else {
-            throw PapertrayError.message("选区无效。")
+            throw LitenoteError.message("选区无效。")
         }
         let selected = source.attributedSubstring(from: range)
         var output = ""

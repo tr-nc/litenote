@@ -1,5 +1,5 @@
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 final class PlacementTests: XCTestCase {
     func testPaperRemainsReachableOnNegativeAndVerticallyStackedDisplays() {

@@ -1,11 +1,11 @@
 import AppKit
 import SwiftUI
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 extension EditorAndStorageTests {
     func testGlassPreferencesPersistResetAndRejectInvalidValues() throws {
-        let suite = "local.papertray.glass-persistence.\(UUID())"
+        let suite = "local.litenote.glass-persistence.\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = GlassPreferences(defaults: defaults)

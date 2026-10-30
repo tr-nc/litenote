@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 extension EditorAndStorageTests {
     func testBottomResizeKeepsExistingTextureInPlace() throws {

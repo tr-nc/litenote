@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Papertray
+@testable import Litenote
 
 @MainActor
 final class EditorAndStorageTests: XCTestCase {
@@ -13,16 +13,16 @@ final class EditorAndStorageTests: XCTestCase {
     private var preferencesSuite: String!
 
     override func setUpWithError() throws {
-        preferencesSuite = "local.papertray.glass-tests.\(UUID())"
+        preferencesSuite = "local.litenote.glass-tests.\(UUID())"
         glass = GlassPreferences(defaults: UserDefaults(suiteName: preferencesSuite)!)
         var style = GlassStyle()
         style.grainStrength = 0 // Pixel alignment tests isolate rules from decorative noise.
         style.tintStrength = 0.85
         glass.update(style)
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("Papertray 测试 \(UUID())")
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("Litenote 测试 \(UUID())")
         attachments = try AttachmentStore(root: root)
         store = try NoteStore(root: root, attachments: attachments)
-        clipboard = NSPasteboard(name: .init("local.papertray.tests.\(UUID())"))
+        clipboard = NSPasteboard(name: .init("local.litenote.tests.\(UUID())"))
     }
 
     override func tearDownWithError() throws {
@@ -226,7 +226,7 @@ final class EditorAndStorageTests: XCTestCase {
 
     func testExportedImageCanBeReadOutsideApp() async throws {
         // Retained integration evidence, not user data or the production storage location.
-        let evidence = FileManager.default.temporaryDirectory.appendingPathComponent("papertray-validation", isDirectory: true)
+        let evidence = FileManager.default.temporaryDirectory.appendingPathComponent("litenote-validation", isDirectory: true)
         let imageStore = try AttachmentStore(root: evidence)
         let id = try await imageStore.importImage(png())
         let source = try EditorProjection.image(id, store: imageStore)
