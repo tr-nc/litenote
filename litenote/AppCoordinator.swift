@@ -9,7 +9,7 @@ extension KeyboardShortcuts.Name {
 }
 
 @main
-struct LitenoteMain {
+struct NoteAppMain {
     static func main() {
         let application = NSApplication.shared
         let delegate = AppCoordinator()
@@ -30,7 +30,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hosted XCTest must never load user notes, register hotkeys or show windows.
-        guard ProcessInfo.processInfo.environment["LITENOTE_TESTING"] != "1",
+        guard ProcessInfo.processInfo.environment["litenote_testing"] != "1",
               NSClassFromString("XCTestCase") == nil else { return }
         let peers = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
         if peers.contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
@@ -43,7 +43,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             store = try NoteStore(root: root, attachments: attachments)
             installMainMenu()
             statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            statusItem.button?.image = NSImage(systemSymbolName: "tray", accessibilityDescription: "Litenote")
+            statusItem.button?.image = NSImage(systemSymbolName: "tray", accessibilityDescription: "litenote")
             let menu = NSMenu()
             menu.delegate = self
             statusItem.menu = menu
@@ -59,7 +59,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             KeyboardShortcuts.onKeyDown(for: .togglePaper) { [weak self] in self?.toggleWorkspace() }
             if KeyboardShortcuts.getShortcut(for: .togglePaper)?.isTakenBySystem == true {
                 KeyboardShortcuts.disable(.togglePaper)
-                NSApp.presentError(LitenoteError.message("横线纸快捷键与系统快捷键冲突，请在 Litenote 设置中重新录制。没有修改系统快捷键。"))
+                NSApp.presentError(NoteError.message("横线纸快捷键与系统快捷键冲突，请在 litenote 设置中重新录制。没有修改系统快捷键。"))
             }
             screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                                    object: nil, queue: .main) { [weak self] _ in
@@ -95,7 +95,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add("显示 / 收起横线纸", action: #selector(toggleWorkspace), to: menu)
         menu.addItem(.separator())
         add("设置…", action: #selector(showSettings), to: menu)
-        add("退出 Litenote", action: #selector(quit), to: menu)
+        add("退出 litenote", action: #selector(quit), to: menu)
     }
 
     @discardableResult
@@ -109,8 +109,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func installMainMenu() {
         let menu = NSMenu()
         let appItem = NSMenuItem()
-        appItem.submenu = NSMenu(title: "Litenote")
-        appItem.submenu?.addItem(withTitle: "退出 Litenote", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = NSMenu(title: "litenote")
+        appItem.submenu?.addItem(withTitle: "退出 litenote", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(appItem)
         let editItem = NSMenuItem()
         let editMenu = NSMenu(title: "编辑")
@@ -134,7 +134,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 430),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.animationBehavior = .none
-            window.title = "Litenote 设置"
+            window.title = "litenote 设置"
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = NSHostingView(rootView: SettingsView())

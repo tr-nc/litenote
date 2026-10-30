@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
-@testable import Litenote
+@testable import litenote
 
 extension EditorAndStorageTests {
     func testGlassPreferencesPersistResetAndRejectInvalidValues() throws {

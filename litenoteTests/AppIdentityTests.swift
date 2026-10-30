@@ -1,10 +1,10 @@
 import XCTest
-@testable import Litenote
+@testable import litenote
 
 final class AppIdentityTests: XCTestCase {
-    func testAppUsesLitenoteNameAndExecutable() {
-        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String, "Litenote")
-        XCTAssertEqual(Bundle.main.executableURL?.lastPathComponent, "Litenote")
+    func testAppUsesLowercaseNameAndExecutable() {
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String, "litenote")
+        XCTAssertEqual(Bundle.main.executableURL?.lastPathComponent, "litenote")
     }
 
     func testRenamePreservesPreferencesDomainAndAttachmentPaths() {

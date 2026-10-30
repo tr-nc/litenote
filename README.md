@@ -1,4 +1,4 @@
-# Litenote
+# litenote
 
 一张固定的 macOS 横线纸：快捷键唤出，写字、粘贴图片，再把文字和本地图片路径复制给同机 Pi。没有工具盘、待办纸、文档列表或新建文档操作。
 
@@ -8,21 +8,21 @@
 
 ```sh
 # Release（arm64 + x86_64）
-xcodebuild -project Litenote.xcodeproj -scheme Litenote \
+xcodebuild -project litenote.xcodeproj -scheme litenote \
   -configuration Release -destination 'generic/platform=macOS' \
   -derivedDataPath build build
 
-open build/Build/Products/Release/Litenote.app
+open build/Build/Products/Release/litenote.app
 
 # 当前开发机上的测试
-xcodebuild -project Litenote.xcodeproj -scheme Litenote \
+xcodebuild -project litenote.xcodeproj -scheme litenote \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath build test
 ```
 
-也可打开 `Litenote.xcodeproj`，选择共享的 Litenote scheme。升级时先正常退出旧进程，再启动新构建。
+也可打开 `litenote.xcodeproj`，选择共享的 litenote scheme。升级时先正常退出旧进程，再启动新构建。
 
-使用本地 ad-hoc 签名，未做 Developer ID 签名或公证，不是公开分发包。不需要关闭 Gatekeeper，也不需要辅助功能、屏幕录制或全局输入监控权限。KeyboardShortcuts 锁定 3.1.0；见 [第三方声明](Litenote/ThirdPartyNotices.txt)。
+使用本地 ad-hoc 签名，未做 Developer ID 签名或公证，不是公开分发包。不需要关闭 Gatekeeper，也不需要辅助功能、屏幕录制或全局输入监控权限。KeyboardShortcuts 锁定 3.1.0；见 [第三方声明](litenote/ThirdPartyNotices.txt)。
 
 ## 使用
 
@@ -44,7 +44,7 @@ xcodebuild -project Litenote.xcodeproj -scheme Litenote \
 
 数据根目录：`~/Library/Application Support/Papertray/`
 
-更名为 Litenote 后保留原数据目录和应用标识 `local.papertray.app`，以继续使用已有正文、附件绝对路径、窗口偏好及快捷键绑定；不移动或复制用户数据。
+更名为 litenote 后保留原数据目录和应用标识 `local.papertray.app`，以继续使用已有正文、附件绝对路径、窗口偏好及快捷键绑定；不移动或复制用户数据。
 
 ```text
 paper.json                固定横线纸的身份引用

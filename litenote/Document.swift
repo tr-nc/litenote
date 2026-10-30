@@ -48,10 +48,10 @@ struct NoteDocument: Codable, Equatable {
     }
 
     func validate() throws {
-        guard schemaVersion == 1 else { throw LitenoteError.message("不支持的文档版本，原文件未被修改。") }
+        guard schemaVersion == 1 else { throw NoteError.message("不支持的文档版本，原文件未被修改。") }
         if case .checklist(let tasks) = content {
             guard !tasks.isEmpty, Set(tasks.map(\.id)).count == tasks.count else {
-                throw LitenoteError.message("待办数据无效，原文件未被修改。")
+                throw NoteError.message("待办数据无效，原文件未被修改。")
             }
         }
     }
@@ -66,7 +66,7 @@ struct NoteDocument: Codable, Equatable {
     }
 }
 
-enum LitenoteError: LocalizedError {
+enum NoteError: LocalizedError {
     case message(String)
     var errorDescription: String? {
         switch self { case .message(let text): return text }

@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Litenote
+@testable import litenote
 
 extension EditorAndStorageTests {
     private func withWorkspace(_ body: (PaperWorkspace, UserDefaults) throws -> Void) throws {
@@ -184,7 +184,7 @@ extension EditorAndStorageTests {
         let menu = NSMenu()
         coordinator.menuNeedsUpdate(menu)
         XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title),
-                       ["显示 / 收起横线纸", "设置…", "退出 Litenote"])
+                       ["显示 / 收起横线纸", "设置…", "退出 litenote"])
         XCTAssertTrue(menu.items.allSatisfy { $0.representedObject == nil })
     }
 }

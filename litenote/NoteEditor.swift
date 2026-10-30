@@ -83,7 +83,7 @@ final class NoteTextView: NSTextView {
             let text = try ClipboardExporter.text(from: attributedString(), range: selectedRange(), store: attachments)
             clipboard.clearContents()
             guard clipboard.setString(text, forType: .string) else {
-                throw LitenoteError.message("无法写入剪贴板。")
+                throw NoteError.message("无法写入剪贴板。")
             }
         } catch { reportError(error) }
     }
@@ -95,7 +95,7 @@ final class NoteTextView: NSTextView {
             let text = try ClipboardExporter.text(from: attributedString(), range: selectedRange(), store: attachments)
             clipboard.clearContents()
             guard clipboard.setString(text, forType: .string) else {
-                throw LitenoteError.message("无法写入剪贴板，正文未删除。")
+                throw NoteError.message("无法写入剪贴板，正文未删除。")
             }
             insertText("", replacementRange: selectedRange())
         } catch { reportError(error) }
@@ -129,7 +129,7 @@ final class NoteTextView: NSTextView {
                 do {
                     let id = try await self.attachments.importImage(data)
                     guard self.attributedString().isEqual(to: snapshot) else {
-                        throw LitenoteError.message("导入期间正文发生变化，图片未插入；请重新粘贴。已导入的图片仍保留在附件目录。")
+                        throw NoteError.message("导入期间正文发生变化，图片未插入；请重新粘贴。已导入的图片仍保留在附件目录。")
                     }
                     let image = try EditorProjection.image(id, store: self.attachments)
                     self.isEditable = true
@@ -140,7 +140,7 @@ final class NoteTextView: NSTextView {
             insertText(NSAttributedString(string: string, attributes: EditorProjection.attributes()),
                        replacementRange: selectedRange())
         } else {
-            reportError(LitenoteError.message("请粘贴文字或静态位图；文件和其他富文本格式暂不支持。"))
+            reportError(NoteError.message("请粘贴文字或静态位图；文件和其他富文本格式暂不支持。"))
         }
     }
 

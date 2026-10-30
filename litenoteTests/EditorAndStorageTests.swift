@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import Litenote
+@testable import litenote
 
 @MainActor
 final class EditorAndStorageTests: XCTestCase {
@@ -19,7 +19,7 @@ final class EditorAndStorageTests: XCTestCase {
         style.grainStrength = 0 // Pixel alignment tests isolate rules from decorative noise.
         style.tintStrength = 0.85
         glass.update(style)
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("Litenote 测试 \(UUID())")
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("litenote 测试 \(UUID())")
         attachments = try AttachmentStore(root: root)
         store = try NoteStore(root: root, attachments: attachments)
         clipboard = NSPasteboard(name: .init("local.litenote.tests.\(UUID())"))

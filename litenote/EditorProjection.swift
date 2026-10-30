@@ -41,7 +41,7 @@ enum EditorProjection {
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: 720
-              ] as CFDictionary) else { throw LitenoteError.message("无法读取附件图片。") }
+              ] as CFDictionary) else { throw NoteError.message("无法读取附件图片。") }
         let attachment = PaperAttachment(id: id)
         let size = NSSize(width: thumbnail.width, height: thumbnail.height)
         attachment.image = NSImage(cgImage: thumbnail, size: size)
@@ -52,7 +52,7 @@ enum EditorProjection {
 
     static func render(_ content: NoteContent, store: AttachmentStore) throws -> NSAttributedString {
         guard case .ruled(let runs) = content else {
-            throw LitenoteError.message("仅支持编辑固定横线纸；旧版待办文件未被修改。")
+            throw NoteError.message("仅支持编辑固定横线纸；旧版待办文件未被修改。")
         }
         let result = NSMutableAttributedString(string: "")
         for run in runs {
@@ -89,7 +89,7 @@ enum ClipboardExporter {
                      store: AttachmentStore) throws -> String {
         guard range.location >= 0, range.length >= 0,
               range.location <= source.length, range.length <= source.length - range.location else {
-            throw LitenoteError.message("选区无效。")
+            throw NoteError.message("选区无效。")
         }
         let selected = source.attributedSubstring(from: range)
         var output = ""
