@@ -30,6 +30,53 @@ final class NoteTextView: NSTextView {
         needsDisplay = true
     }
 
+    override func selectAll(_ sender: Any?) {
+        guard isSelectable else { return }
+        let selection = selectedRange()
+        guard !hasMarkedText(), selectedRanges.count == 1,
+              let block = textBlock(at: selection.location),
+              selection != block,
+              selection.length == 0 || (selection.location >= block.location && NSMaxRange(selection) <= NSMaxRange(block)) else {
+            super.selectAll(sender)
+            return
+        }
+        // Derive the level from the actual selection, not a keypress counter:
+        // moving the caret or editing immediately starts a new block selection.
+        setSelectedRange(block)
+        scrollRangeToVisible(block)
+    }
+
+    private func textBlock(at location: Int) -> NSRange? {
+        let text = string as NSString
+        var blocks: [NSRange] = []
+        var blockStart: Int?
+        var blockEnd = 0
+        var offset = 0
+        while offset < text.length {
+            var lineEnd = 0
+            var contentsEnd = 0
+            // NSString keeps AppKit's UTF-16 offsets and treats CRLF as one break.
+            text.getLineStart(nil, end: &lineEnd, contentsEnd: &contentsEnd,
+                              for: NSRange(location: offset, length: 0))
+            if contentsEnd == offset {
+                if let start = blockStart {
+                    blocks.append(NSRange(location: start, length: blockEnd - start))
+                    blockStart = nil
+                }
+            } else {
+                if blockStart == nil { blockStart = offset }
+                blockEnd = contentsEnd
+            }
+            offset = lineEnd
+        }
+        if let start = blockStart {
+            blocks.append(NSRange(location: start, length: blockEnd - start))
+        }
+        // On a separator, prefer the following block; after the last block,
+        // use the preceding one. Boundary line breaks are never selected.
+        return blocks.first { location <= NSMaxRange($0) } ?? blocks.last
+    }
+
     override func copy(_ sender: Any?) {
         do {
             guard selectedRange().length > 0 else { return }
